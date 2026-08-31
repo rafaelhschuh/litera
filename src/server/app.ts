@@ -9,6 +9,7 @@ import type { ReadingLocator } from '../shared/progress.js'
 import { normalizeProgress } from '../shared/progress.js'
 import { createSession, deleteSession, parseCookies, requireAdmin, requireUser, sessionMiddleware, type SessionUser } from './auth.js'
 import type { AppConfig } from './config.js'
+import { ensureOptimizedCover, InvalidCoverError, storeOptimizedCover } from './covers.js'
 import { hashPassword, openDatabase, verifyPassword, type LiteraDatabase } from './database.js'
 import { extractEpub, readEpubAsset, readEpubChapter, searchEpub } from './epub.js'
 import { validateLibraryPath } from './scanner.js'
@@ -112,7 +113,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.3.0', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.3.1', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -174,11 +175,26 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     res.setHeader('Content-Disposition', 'inline')
     streamFile(req, res, file.filePath, next)
   })
-  app.get('/api/v1/books/:id/cover', requireUser, (req, res, next) => {
+  app.get('/api/v1/books/:id/cover', requireUser, async (req, res, next) => {
     const row = db.prepare(`SELECT b.cover_path AS coverPath FROM books b JOIN book_files f ON f.book_id=b.id AND f.status='available' WHERE b.id=? AND (?='admin' OR EXISTS (SELECT 1 FROM user_libraries ul WHERE ul.library_id=f.library_id AND ul.user_id=?)) LIMIT 1`).get(Number(req.params.id), req.user!.role, req.user!.id) as { coverPath: string | null } | undefined
     if (!row?.coverPath || !fs.existsSync(row.coverPath)) { res.status(404).end(); return }
-    res.setHeader('Cache-Control', 'private, max-age=86400')
-    streamFile(req, res, row.coverPath, next)
+    try {
+      const coverPath = await ensureOptimizedCover(row.coverPath)
+      if (coverPath !== row.coverPath) {
+        const result = db.prepare('UPDATE books SET cover_path=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND cover_path=?').run(coverPath, Number(req.params.id), row.coverPath)
+        const coversRoot = path.resolve(config.dataDir, 'covers')
+        const oldCover = path.resolve(row.coverPath)
+        const relative = path.relative(coversRoot, oldCover)
+        if (result.changes && relative && !relative.startsWith('..') && !path.isAbsolute(relative)) await fs.promises.rm(oldCover, { force: true })
+      }
+      const stat = fs.statSync(coverPath)
+      const etag = `"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`
+      res.type('image/jpeg')
+      res.setHeader('Cache-Control', 'private, max-age=86400, stale-while-revalidate=604800')
+      res.setHeader('ETag', etag)
+      if (req.headers['if-none-match'] === etag) { res.status(304).end(); return }
+      streamFile(req, res, coverPath, next)
+    } catch (error) { next(error) }
   })
   app.get('/api/v1/books/:id/epub/manifest', requireUser, async (req, res, next) => {
     try {
@@ -508,7 +524,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     if (!result.changes) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
     res.json({ updated: true })
   })
-  app.put('/api/v1/admin/metadata/books/:id/cover', requireAdmin, (req, res) => {
+  app.put('/api/v1/admin/metadata/books/:id/cover', requireAdmin, async (req, res, next) => {
     const input = coverUploadSchema.safeParse(req.body)
     if (!input.success) { apiError(res, 400, 'INVALID_COVER', 'Use a JPEG, PNG or WebP image up to 8 MB'); return }
     const match = input.data.dataUrl.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/i)!
@@ -516,13 +532,15 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     if (!image.length || image.length > 8 * 1024 * 1024) { apiError(res, 400, 'INVALID_COVER', 'Cover image must be no larger than 8 MB'); return }
     const bookId = Number(req.params.id)
     if (!db.prepare('SELECT id FROM books WHERE id=?').get(bookId)) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
-    const extension = match[1]!.toLowerCase() === 'jpeg' ? 'jpg' : match[1]!.toLowerCase()
     const coverDir = path.join(config.dataDir, 'covers')
-    fs.mkdirSync(coverDir, { recursive: true })
-    const coverPath = path.join(coverDir, `${bookId}-manual.${extension}`)
-    fs.writeFileSync(coverPath, image, { mode: 0o600 })
-    db.prepare(`UPDATE books SET cover_path=?,metadata_status='matched',metadata_provider='manual',metadata_provenance='manual',metadata_confidence=1,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(coverPath, bookId)
-    res.json({ updated: true, hasCover: true })
+    try {
+      const coverPath = await storeOptimizedCover(image, path.join(coverDir, `${bookId}-manual`))
+      db.prepare(`UPDATE books SET cover_path=?,metadata_status='matched',metadata_provider='manual',metadata_provenance='manual',metadata_confidence=1,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(coverPath, bookId)
+      res.json({ updated: true, hasCover: true })
+    } catch (error) {
+      if (error instanceof InvalidCoverError) { apiError(res, 400, 'INVALID_COVER', error.message); return }
+      next(error)
+    }
   })
   app.get('/api/v1/admin/compatibility', requireAdmin, (_req, res) => {
     const enabled = (db.prepare(`SELECT value FROM system_settings WHERE key='legacy.enabled'`).get() as any)?.value === 'true'
@@ -537,7 +555,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.3.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.3.1', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

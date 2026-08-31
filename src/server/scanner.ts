@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { AppConfig } from './config.js'
+import { storeOptimizedCover } from './covers.js'
 import type { LiteraDatabase } from './database.js'
 import { extractEpub } from './epub.js'
 import { configuredMetadataProvider, type NormalizedMetadata } from './metadata.js'
@@ -120,9 +121,9 @@ export async function scanLibrary(db: LiteraDatabase, config: AppConfig, library
       const metadata = { ...embedded, description: enriched?.description, genres: enriched?.genres ?? ('genres' in embedded ? embedded.genres : undefined), publishedYear: enriched?.publishedYear, series: enriched?.series ?? ('series' in embedded ? embedded.series : undefined), seriesIndex: enriched?.seriesIndex ?? ('seriesIndex' in embedded ? embedded.seriesIndex : undefined), provider: enriched?.provider, providerKey: enriched?.key, confidence: enriched?.confidence, provenance: enriched?.provenance }
       let coverPath: string | undefined
       if ('cover' in metadata && metadata.cover) {
-        const covers = path.join(config.dataDir, 'covers'); fs.mkdirSync(covers, { recursive: true })
-        coverPath = path.join(covers, `${createHash('sha256').update(identity).digest('hex')}${metadata.cover.extension}`)
-        fs.writeFileSync(coverPath, metadata.cover.data, { mode: 0o600 })
+        const covers = path.join(config.dataDir, 'covers')
+        try { coverPath = await storeOptimizedCover(metadata.cover.data, path.join(covers, createHash('sha256').update(identity).digest('hex'))) }
+        catch { coverPath = undefined }
       }
       db.transaction(() => {
         if (existing) {

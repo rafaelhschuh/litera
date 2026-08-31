@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 — 2026-08-31
+
+- Capas normalizadas para JPEG progressivo de até 640 × 960 pixels durante scan e upload manual.
+- Capas persistidas anteriormente migradas sob demanda sem modificar os livros fonte.
+- Entrega de capas com MIME explícito, cache privado, revalidação por ETag e resposta 304.
+
 ## 0.3.0 — 2026-08-31
 
 - Release inicial pública do Litera 0.3.0.

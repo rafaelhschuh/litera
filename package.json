@@ -1,6 +1,6 @@
 {
   "name": "litera",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "GPL-3.0-only",
   "private": true,
   "type": "module",
@@ -28,6 +28,7 @@
     "fast-xml-parser": "^5.2.5",
     "pdfjs-dist": "6.2.108",
     "sanitize-html": "^2.17.0",
+    "sharp": "^0.35.4",
     "vue": "^3.5.20",
     "vue-router": "^4.5.1",
     "yauzl": "^3.2.0",
