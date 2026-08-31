@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "generated_at": "2026-08-25",
+  "project": "Litera",
+  "files": [
+    ".github/workflows/ci.yml",
+    "AGENTS.md",
+    "CODEX_PROMPTS.md",
+    "README.md",
+    "docs/architecture/data-and-integrations.md",
+    "docs/architecture/overview.md",
+    "docs/decisions/ADR-0001-progressive-enhancement.md",
+    "docs/decisions/ADR-0002-reader-adapter-boundary.md",
+    "docs/decisions/ADR-0003-legacy-client.md",
+    "docs/development/definition-of-ready-and-done.md",
+    "docs/development/definitions.md",
+    "docs/development/git-and-ci.md",
+    "docs/development/implementation-roadmap.md",
+    "docs/development/testing.md",
+    "docs/frontend/frontend-foundation.md",
+    "docs/frontend/information-architecture.md",
+    "docs/frontend/ui-ux-technical-spec.md",
+    "docs/product/branding.md",
+    "docs/product/requirements.md",
+    "docs/product/vision-and-scope.md",
+    "docs/security/threat-model.md",
+    "foundation-manifest.json",
+    "specs/README.md",
+    "specs/templates/feature-spec.md"
+  ],
+  "confirmed_decisions": [
+    "Litera is a self-hosted digital book library/server.",
+    "TypeScript, Vue.js, npm, Docker and Docker Compose are the implementation direction.",
+    "The proprietary reader experience is the primary product differentiator.",
+    "EPUB and PDF are first-class MVP formats.",
+    "Metadata is extracted and enriched through external provider integrations.",
+    "The UI is editorial, elegant and responsive.",
+    "A dedicated /legacy client must preserve core reading flows for an older physical iPad in the iOS 10.x / old WebKit generation; exact device/version remains to be confirmed.",
+    "Progressive enhancement/fallback must be automatic rather than a manual mode choice.",
+    "The /legacy client is a separate conservative frontend over the same Litera API and can be enabled/disabled by an administrator."
+  ],
+  "inferred_decisions": [
+    "The backend should expose a versionable API suitable for a future mobile client.",
+    "Reading progress is private user data and should be protected by server-side authorization.",
+    "A provider adapter boundary is preferable to hard-coding one metadata source."
+  ],
+  "engineering_defaults": [
+    "Use PostgreSQL for the normal multi-user deployment unless implementation evidence favors another choice.",
+    "Use local authentication in the initial implementation.",
+    "Keep offline-first functionality out of MVP while preserving future compatibility."
+  ],
+  "open_questions": [
+    "Final metadata provider set and licensing/API limits should be verified against current official documentation before implementation.",
+    "Exact EPUB and PDF rendering engines should be selected after compatibility/security evaluation.",
+    "The exact browser compatibility floor should be validated on the physical iOS 10.x reference iPad and representative old Android hardware."
+  ]
+}
