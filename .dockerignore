@@ -1,0 +1,17 @@
+node_modules
+dist
+build
+coverage
+data
+books
+uploads
+.git
+.github
+.env
+.env.*
+*.db
+*.sqlite*
+*.log
+tmp
+temp
+npm-debug.log*

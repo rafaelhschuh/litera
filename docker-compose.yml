@@ -1,0 +1,27 @@
+services:
+  litera:
+    build: .
+    ports:
+      - "${LITERA_PORT:-3000}:3000"
+    environment:
+      LITERA_ADMIN_USERNAME: "${LITERA_ADMIN_USERNAME:-admin}"
+      LITERA_ADMIN_PASSWORD: "${LITERA_ADMIN_PASSWORD:?Set LITERA_ADMIN_PASSWORD (minimum 12 characters)}"
+      LITERA_SECURE_COOKIES: "${LITERA_SECURE_COOKIES:-false}"
+      LITERA_PUBLIC_ORIGIN: "${LITERA_PUBLIC_ORIGIN:-}"
+      LITERA_OPENLIBRARY_ENABLED: "${LITERA_OPENLIBRARY_ENABLED:-false}"
+      LITERA_OPENLIBRARY_CONTACT: "${LITERA_OPENLIBRARY_CONTACT:-}"
+      LITERA_MAX_BOOK_MB: "${LITERA_MAX_BOOK_MB:-512}"
+    volumes:
+      - litera_data:/data
+      - "${LITERA_BOOKS_PATH:-./books}:/books:ro"
+    restart: unless-stopped
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  litera_data:
