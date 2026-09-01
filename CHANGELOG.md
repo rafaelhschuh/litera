@@ -1,6 +1,6 @@
 # Changelog
 
-## Não publicado — correções após 0.4.1
+## 0.4.2 — 2026-09-01
 
 - Texto adaptado reconstrói palavras, acentos, ligaturas, parágrafos e colunas sem descartar bordas da página. CMaps locais são fornecidos ao extrator.
 - Navegação percorre o conteúdo vertical antes de trocar a página física e restaura posição dentro de texto ou ilustração. Falha de carregamento preserva página e progresso anteriores.
