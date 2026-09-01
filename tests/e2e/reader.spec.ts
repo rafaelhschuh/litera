@@ -143,6 +143,7 @@ test('PDF: readable paragraphs, screen navigation, restore and cropped illustrat
   await expect(page.getByAltText('Ilustração da página')).toBeVisible()
   await expect(page.locator('.reader-document')).not.toContainText('FINAL:')
   await page.setViewportSize({ width: 844, height: 390 })
+  await expect.poll(async () => page.locator('.reader-shell').evaluate(el => Math.round(el.getBoundingClientRect().height))).toBe(390)
   await expect(page.getByAltText('Ilustração da página')).toBeVisible()
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await stage.evaluate(el => { const image = el.querySelector('img')!; el.scrollTop += image.getBoundingClientRect().top - el.getBoundingClientRect().top + image.height * .25 })
