@@ -29,7 +29,17 @@ describe('Litera integrated API', () => {
     const search = await context.agent.get('/api/v1/books?q=Ilha')
     expect(search.body.books).toHaveLength(1); expect(search.body.books[0]).toMatchObject({ title: 'A Ilha de Teste', author: 'Ana Leitora', format: 'epub', hasCover: true })
     expect((context.db.prepare('SELECT cover_path AS coverPath FROM books WHERE id=?').get(search.body.books[0].id) as { coverPath: string }).coverPath).toMatch(/\.web\.jpg$/)
-    expect((await context.agent.get('/api/v1/books?q=Caderno')).body.books[0].author).toBe('Paulo Página')
+    const pdf = (await context.agent.get('/api/v1/books?q=Caderno')).body.books[0]
+    expect(pdf).toMatchObject({ author: 'Paulo Página', format: 'pdf', hasCover: true })
+    const pdfCover = context.db.prepare('SELECT cover_path AS coverPath FROM books WHERE id=?').get(pdf.id) as { coverPath: string }
+    expect(await sharp(pdfCover.coverPath).metadata()).toMatchObject({ format: 'jpeg', isProgressive: true })
+    await fs.rm(pdfCover.coverPath)
+    context.db.prepare('UPDATE books SET cover_path=NULL WHERE id=?').run(pdf.id)
+    const backfill = await context.agent.post(`/api/v1/admin/libraries/${created.body.library.id}/scan`)
+    expect(backfill.body.report).toMatchObject({ updated: 1 })
+    expect((await context.agent.get(`/api/v1/books/${pdf.id}`)).body.book.hasCover).toBe(true)
+    const afterBackfill = await context.agent.post(`/api/v1/admin/libraries/${created.body.library.id}/scan`)
+    expect(afterBackfill.body.report).toMatchObject({ added: 0, updated: 0 })
     await fs.rm(path.join(context.books, 'caderno.pdf'))
     const third = await context.agent.post(`/api/v1/admin/libraries/${created.body.library.id}/scan`)
     expect(third.body.report.missing).toBe(1)

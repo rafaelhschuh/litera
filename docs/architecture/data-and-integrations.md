@@ -17,6 +17,7 @@
 ## Ownership
 
 - Library scanner owns BookFile discovery/reconciliation.
+- Library scanner owns derived cover generation: embedded EPUB covers and the first PDF page are normalized into bounded web JPEGs under persistent data storage; source books remain read-only.
 - Catalog owns normalized book/work metadata.
 - Metadata engine owns provider responses and matching provenance.
 - Reading domain owns ReadingProgress and reader-specific preferences.
@@ -43,6 +44,8 @@ The locator is format-specific. EPUB should use a stable semantic location (for 
 ## Library identity
 
 A file identity should be based on stable filesystem/file characteristics sufficient to reconcile renames and rescans without trusting filename alone. The domain model should preserve the distinction between a physical file and a logical work.
+
+Rescans remain idempotent, but an unchanged PDF with no usable stored cover is intentionally reprocessed once to backfill the derived cover. Catalog clients consume the cover endpoint and never open full PDF content merely to render a thumbnail.
 
 ## Metadata provider boundary
 

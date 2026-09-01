@@ -1,6 +1,6 @@
 {
   "name": "litera",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "license": "GPL-3.0-only",
   "private": true,
   "type": "module",
@@ -22,6 +22,7 @@
     "verify": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.8",
     "better-sqlite3": "^12.2.0",
     "epubjs": "^0.3.93",
     "express": "^5.1.0",

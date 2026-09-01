@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 — 2026-09-01
+
+- Primeira página de PDFs renderizada no backend e armazenada como capa JPEG otimizada durante o scan.
+- Rescan preenche capas ausentes de PDFs inalterados sem sobrescrever capas já existentes.
+- Catálogo deixa de abrir PDFs com PDF.js para gerar prévias no navegador, eliminando downloads parciais inesperados de `/content`.
+
 ## 0.3.1 — 2026-08-31
 
 - Capas normalizadas para JPEG progressivo de até 640 × 960 pixels durante scan e upload manual.

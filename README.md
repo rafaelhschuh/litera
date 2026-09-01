@@ -2,7 +2,7 @@
 
 Litera Beta é uma biblioteca digital self-hosted para EPUB e PDF, com múltiplos acervos, jobs de scan, catálogo, metadata resiliente, reader integrado, progresso concorrente por usuário, painel administrativo e um cliente conservador em `/legacy`.
 
-**Versão atual:** `0.3.1` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.3.1`
+**Versão atual:** `0.3.2` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.3.2`
 
 ## Ambiente local com Docker Compose
 
@@ -45,7 +45,7 @@ docker compose down
 
 ## Produção com Docker Compose
 
-O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.3.1`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
+O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.3.2`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
 
 1. crie a pasta `books` ao lado do Compose e copie para ela os arquivos `.epub` e `.pdf`;
 2. troque `CHANGE_ME_BEFORE_DEPLOY` por uma senha inédita de pelo menos 12 caracteres;
@@ -73,9 +73,9 @@ docker compose -f docker-compose.production.yml pull
 docker compose -f docker-compose.production.yml up -d
 ```
 
-O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.3.1` para evitar upgrades implícitos.
+O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.3.2` para evitar upgrades implícitos.
 
-As capas extraídas ou enviadas manualmente são armazenadas como JPEG progressivo de até 640 × 960 pixels. Capas persistidas por versões anteriores são convertidas no primeiro acesso, sem alterar o EPUB/PDF fonte.
+As capas extraídas, enviadas manualmente ou geradas a partir da primeira página de um PDF são armazenadas como JPEG progressivo de até 640 × 960 pixels. O catálogo carrega somente esse derivado e nunca abre o PDF para montar a capa no navegador. Um rescan preenche automaticamente capas ausentes de PDFs já catalogados, mesmo quando o arquivo fonte não mudou. Capas persistidas por versões anteriores são convertidas no primeiro acesso, sem alterar o EPUB/PDF fonte.
 
 ## Cliente legacy
 

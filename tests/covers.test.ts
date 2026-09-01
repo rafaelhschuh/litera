@@ -5,6 +5,12 @@ import { describe, expect, it } from 'vitest'
 import { ensureOptimizedCover, optimizeCover, storeOptimizedCover } from '../src/server/covers.js'
 
 describe('web cover optimization', () => {
+  it('never downloads PDF content to render a catalog cover in the browser', async () => {
+    const component = await fs.readFile(path.resolve('src/web/components/BookCover.vue'), 'utf8')
+    expect(component).not.toContain('pdfjs-dist')
+    expect(component).not.toContain('/content')
+  })
+
   it('creates a progressive JPEG within the web display bounds', async () => {
     const source = await sharp({ create: { width: 1600, height: 2400, channels: 4, background: '#74394b' } }).png().toBuffer()
     const optimized = await optimizeCover(source)

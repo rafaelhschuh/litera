@@ -11,7 +11,7 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=3000 LITERA_DATA_DIR=/data LITERA_BOOK_ROOTS=/books
 WORKDIR /app
 LABEL org.opencontainers.image.title="Litera" \
-      org.opencontainers.image.version="0.3.1" \
+      org.opencontainers.image.version="0.3.2" \
       org.opencontainers.image.licenses="GPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/rafaelhschuh/litera"
 COPY package.json package-lock.json ./

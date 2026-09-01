@@ -12,11 +12,13 @@ Tests should trace to requirements and reader behavior. The highest-risk area is
 - Progress calculations and restore rules.
 - Metadata normalization and matching confidence.
 - Library identity/reconciliation logic.
+- Cover optimization and server-side PDF first-page rendering.
 - Authorization policies.
 
 ### Integration
 
 - Scan -> catalog -> metadata enrichment.
+- Rescan backfill of missing PDF covers without source-file changes.
 - Provider timeout/failure handling.
 - Progress persistence and concurrent updates.
 - Protected library access.
