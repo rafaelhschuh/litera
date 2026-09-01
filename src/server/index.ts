@@ -5,7 +5,7 @@ import { startAutomaticScans } from './jobs.js'
 const config = loadConfig()
 const { app, db } = createApp(config)
 const stopAutomaticScans = startAutomaticScans(db, config)
-const server = app.listen(config.port, '0.0.0.0', () => console.log(JSON.stringify({ level: 'info', event: 'server_started', port: config.port, version: '0.4.0' })))
+const server = app.listen(config.port, '0.0.0.0', () => console.log(JSON.stringify({ level: 'info', event: 'server_started', port: config.port, version: '0.4.1' })))
 
 let stopping = false
 function shutdown(signal: string): void {

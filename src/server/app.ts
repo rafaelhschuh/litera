@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
+import { createCanvas } from '@napi-rs/canvas'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { z } from 'zod'
@@ -121,7 +122,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.4.0', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.4.1', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -248,7 +249,8 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     try {
       const file = locateBookFile(db, Number(req.params.id), req.user!)
       if (!file || file.format !== 'pdf') { apiError(res, 404, 'PDF_NOT_FOUND', 'PDF is unavailable'); return }
-      const pageNumber = Math.max(1, Number(req.query.page) || 1)
+      const requestedPage = Number(req.query.page)
+      const pageNumber = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
       const stat = fs.statSync(file.filePath)
       const cacheKey = `${file.filePath}:${stat.mtimeMs}:${pageNumber}`
       const cached = pdfReflowCache.get(cacheKey)
@@ -276,6 +278,35 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
         pdfReflowCache.set(cacheKey, value)
         if (pdfReflowCache.size > 500) pdfReflowCache.delete(pdfReflowCache.keys().next().value!)
         res.json({ page: safePage, ...value, cached: false })
+      } finally { await task.destroy() }
+    } catch (error) { next(error) }
+  })
+
+  app.get('/api/v1/books/:id/pdf/page-image', requireUser, async (req, res, next) => {
+    try {
+      const file = locateBookFile(db, Number(req.params.id), req.user!)
+      if (!file || file.format !== 'pdf') { apiError(res, 404, 'PDF_NOT_FOUND', 'PDF is unavailable'); return }
+      const pageParam = Number(req.query.page)
+      const requestedPage = Number.isFinite(pageParam) ? Math.max(1, Math.floor(pageParam)) : 1
+      const stat = fs.statSync(file.filePath)
+      const etag = `W/"${stat.size}-${Math.round(stat.mtimeMs)}-${requestedPage}"`
+      res.setHeader('Cache-Control', 'private, no-cache')
+      res.setHeader('ETag', etag)
+      if (req.headers['if-none-match'] === etag) { res.status(304).end(); return }
+      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false, standardFontDataUrl: pdfStandardFontDataUrl })
+      const document = await task.promise
+      try {
+        const pageNumber = Math.min(document.numPages, requestedPage)
+        const page = await document.getPage(pageNumber)
+        const base = page.getViewport({ scale: 1 })
+        const scale = Math.max(.25, Math.min(1.5, 1400 / base.width, 1800 / base.height))
+        const viewport = page.getViewport({ scale })
+        const canvas = createCanvas(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)))
+        const canvasContext = canvas.getContext('2d')
+        await page.render({ canvas: canvas as any, canvasContext: canvasContext as any, viewport, background: '#ffffff' }).promise
+        page.cleanup()
+        res.type('png').setHeader('Content-Disposition', `inline; filename="page-${pageNumber}.png"`)
+        res.send(canvas.toBuffer('image/png'))
       } finally { await task.destroy() }
     } catch (error) { next(error) }
   })
@@ -566,7 +597,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.4.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.4.1', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

@@ -90,6 +90,8 @@ textarea{width:100%;padding:var(--space-3) var(--space-4);color:var(--text-prima
 .reader-document__section{margin-top:2em!important}
 .reader-document__bold{font-weight:700}
 .reader-document__italic{font-style:italic}
+.reader-document__visual{margin:var(--space-5) 0 0;break-inside:avoid-column}
+.reader-document__visual img{display:block;width:100%;height:auto}
 .reader-text-status{color:inherit;opacity:.7}
 .offline-book-control{display:grid;justify-items:start;gap:var(--space-2);margin-bottom:var(--space-6)}
 .offline-book-control .alert,.offline-book-control .field__hint{margin:0}

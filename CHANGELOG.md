@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1 — 2026-09-01
+
+- PDF em modo adaptado permanece no reflow em páginas complexas em vez de trocar silenciosamente para o documento original.
+- Texto extraído continua integralmente disponível; páginas com imagens, vetores, rotação, ordem ambígua ou sem texto extraível recebem uma referência visual da própria página.
+- Referência visual é renderizada sob demanda pelo PDF.js, autenticada e sem modificar o PDF fonte ou criar derivados persistentes durante o scan.
+- Testes de fidelidade e E2E foram ajustados para exigir conteúdo textual completo e preservação visual no modo adaptado.
+
 ## 0.4.0 — 2026-09-01
 
 - Reader EPUB estabilizado no Safari/WebKit: touch, seleção, notas, navegação e restauração de posição.

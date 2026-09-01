@@ -9,7 +9,7 @@ describe('document fidelity and delivery', () => {
   let context: Awaited<ReturnType<typeof testContext>>
   beforeEach(async () => { context = await testContext() })
   afterEach(async () => { await context.cleanup() })
-  it('retains the beginning, middle, end and falls back for the image page', async () => {
+  it('retains all text and preserves complex pages with a visual reference', async () => {
     await writeFidelityPdf(path.join(context.books, 'fidelity.pdf'), 8 * 1024 * 1024)
     await login(context.agent)
     const library = await context.agent.post('/api/v1/admin/libraries').send({ name: 'Fidelity', path: context.books })
@@ -20,7 +20,9 @@ describe('document fidelity and delivery', () => {
     expect(text).toContain('INICIO:'); expect(text).toContain('MEIO:'); expect(text).toContain('FINAL: capacidade de continuar o paragrafo completo.')
     expect(page.adaptation).toMatchObject({ safe: true, coverageRatio: 1 })
     const image = (await context.agent.get(`/api/v1/books/${book.id}/pdf/reflow?page=2`)).body
-    expect(image.adaptation).toMatchObject({ safe: false, coverageRatio: 1 })
+    expect(image.adaptation).toMatchObject({ safe: false, textComplete: true, needsVisualReference: true, hasGraphics: true, coverageRatio: 1 })
+    const visual = await context.agent.get(`/api/v1/books/${book.id}/pdf/page-image?page=2`)
+    expect(visual.status).toBe(200); expect(visual.headers['content-type']).toContain('image/png'); expect(visual.body.length).toBeGreaterThan(100)
     const bytes = await fs.readFile(path.join(context.books, 'fidelity.pdf'))
     const url = `/api/v1/books/${book.id}/content`
     const ranged = await context.agent.get(url).set('Range', 'bytes=10-29')
@@ -35,8 +37,8 @@ describe('document fidelity and delivery', () => {
     const items = [{ str: 'top', transform: [12, 0, 0, 12, 40, 790] }, { str: 'bottom', transform: [12, 0, 0, 12, 40, 10] }]
     const blocks = structurePdfText(items, {}, 612, 792)
     expect(assessPdfAdaptation(items, blocks, false).safe).toBe(true)
-    expect(assessPdfAdaptation(items, blocks.slice(1), false).safe).toBe(false)
-    expect(assessPdfAdaptation(items, blocks, true).safe).toBe(false)
+    expect(assessPdfAdaptation(items, blocks.slice(1), false)).toMatchObject({ safe: false, textComplete: false, needsVisualReference: true })
+    expect(assessPdfAdaptation(items, blocks, true)).toMatchObject({ safe: false, textComplete: true, needsVisualReference: true })
     const columns = [{ str: 'left', width: 25, transform: [12, 0, 0, 12, 40, 790] }, { str: 'right', width: 25, transform: [12, 0, 0, 12, 340, 790] }]
     expect(assessPdfAdaptation(columns, structurePdfText(columns), false).safe).toBe(false)
     expect(assessPdfAdaptation([...items].reverse(), blocks, false).safe).toBe(false)

@@ -76,7 +76,7 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   expect(errors).toEqual([])
 })
 
-test('PDF: complete adapted text and graphic fallback', async ({ page }) => {
+test('PDF: complete adapted text and preserved graphics', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   await openBook(page, 'Fidelidade PDF')
   await expect(page.locator('.pdf-canvas').first()).toBeVisible()
@@ -88,10 +88,11 @@ test('PDF: complete adapted text and graphic fallback', async ({ page }) => {
   await page.locator('.reader-document p').last().scrollIntoViewIfNeeded()
   await expect(page.locator('.reader-document p').last()).toBeVisible()
   await page.keyboard.press('ArrowRight')
-  await expect(page.getByRole('status')).toContainText('formato original')
-  await expect(page.locator('.pdf-canvas')).toBeVisible()
+  await expect(page.locator('.reader-document')).toContainText('Pagina com imagem preservada')
+  await expect(page.getByAltText('Conteúdo visual preservado desta página')).toBeVisible()
+  await expect(page.locator('.pdf-canvas')).toHaveCount(0)
   await page.setViewportSize({ width: 844, height: 390 })
-  await expect(page.locator('.pdf-canvas')).toBeVisible()
+  await expect(page.getByAltText('Conteúdo visual preservado desta página')).toBeVisible()
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Documento original', exact: true }).click()
   await expect(page.locator('.pdf-page').first()).toHaveAttribute('data-page', '2')

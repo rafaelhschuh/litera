@@ -26,11 +26,11 @@ Falhas não são ignoradas. O workflow normal tem somente `contents: read`.
 
 `.github/workflows/container.yml` publica `ghcr.io/rafaelhschuh/litera:main` e `sha-<commit>` em pushes para `main`, usando `GITHUB_TOKEN` com `packages: write`.
 
-`.github/workflows/release.yml` roda para tags `v*.*.*`, exige que a tag corresponda à versão de `package.json`, repete todos os gates, publica as tags semânticas da imagem e só então cria a GitHub Release. Para `v0.3.0`, as tags são `0.3.0`, `0.3`, `0` e `latest`.
+`.github/workflows/release.yml` roda para tags `v*.*.*`, exige que a tag corresponda à versão de `package.json`, repete todos os gates, publica as tags semânticas da imagem e só então cria a GitHub Release. Para `v0.4.1`, as tags são `0.4.1`, `0.4`, `0` e `latest`.
 
 Processo de release:
 
 ```bash
-git tag -a v0.3.0 -m "Litera 0.3.0"
-git push origin v0.3.0
+git tag -a v0.4.1 -m "Litera 0.4.1"
+git push origin v0.4.1
 ```

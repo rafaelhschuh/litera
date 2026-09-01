@@ -17,7 +17,7 @@ A adaptação PDF descartava linhas nas faixas superior/inferior de 9% e ignorav
 - Transições animam somente uma apresentação descartável, nunca iframe ou paginação. A duração é 240ms, equivalente a `--motion-slow`, com easing padrão e deslocamento de 18px já usado pelo Reader. Reduced motion dispensa essa apresentação. PDF mantém canvas anterior até o seguinte estar renderizado e usa captura da área visível para a transição.
 - Navegação percorre telas dentro do capítulo antes de cruzar o spine. Ao voltar de capítulo, posiciona no final. Restauração usa elemento/offset semântico existente; não transforma EPUB em percentual como chave.
 - Resize usa debounce de 120ms para agrupar barras/orientação, preserva locator anterior e adia navegação recebida durante ajuste. Não usa detecção de user agent.
-- PDF conserva todo texto extraído, mede cobertura sem whitespace e usa fallback por página quando há gráficos, texto rotacionado, ordem incerta ou perda. A contagem é conferida novamente no DOM. Original continua acessível; adaptação não promete reflow universal.
+- PDF conserva todo texto extraído e mede cobertura sem whitespace. Páginas com gráficos, texto rotacionado, ordem incerta, ausência de texto extraível ou divergência de cobertura continuam no modo adaptado e recebem uma referência visual rasterizada da própria página. A contagem é conferida novamente no DOM. O documento original continua acessível como modo explícito separado.
 - PDF.js e worker usam o build `legacy` da mesma versão dentro do Reader moderno. Isso não redireciona ao cliente `/legacy`. A [matriz oficial Mozilla](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions) indica Safari 18+ nesse build.
 
 ## Alternativas e consequências
@@ -26,6 +26,6 @@ Animar o iframe ou apenas esconder overflow mantém a causa de recomposição. R
 
 A CSP passa a ser uma parte explícita da proteção do iframe moderno. Removê-la ou carregar HTML não sanitizado é uma regressão de segurança. O teste de bloqueio de scripts deve acompanhar qualquer mudança nessa fronteira.
 
-Fallback conservador pode mostrar o original mesmo em páginas potencialmente adaptáveis. É preferível a desaparecer texto, imagens ou diagramas silenciosamente.
+A referência visual é gerada sob demanda pelo mesmo PDF.js já usado pelo Litera e não altera o arquivo fonte nem cria um segundo pipeline persistente no scan. Isso mantém imagens e diagramas disponíveis quando a estrutura do PDF não pode ser refluída com fidelidade sem tirar o usuário do modo adaptado.
 
 Nenhuma mudança em armazenamento offline, fila offline ou service worker foi necessária.

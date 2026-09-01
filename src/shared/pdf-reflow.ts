@@ -108,8 +108,16 @@ export function assessPdfAdaptation(items: PdfTextItem[], blocks: PdfReflowBlock
     return sameLine && (gap > fontSize(item) * 4 || gap < -fontSize(item))
   })
   const uncertainOrder = source.some((item, index) => index > 0 && (item.transform?.[5] ?? 0) > (source[index - 1]?.transform?.[5] ?? 0) + Math.max(4, fontSize(item)))
+  const textComplete = original === rendered
+  const needsVisualReference = hasGraphics || rotated || fragmented || uncertainOrder || !textComplete || original.length === 0
   return {
-    safe: original.length > 0 && original === rendered && !hasGraphics && !rotated && !uncertainOrder && !fragmented,
+    safe: original.length > 0 && textComplete && !needsVisualReference,
+    textComplete,
+    needsVisualReference,
+    hasGraphics,
+    rotated,
+    fragmented,
+    uncertainOrder,
     sourceTextItems: source.length, renderedTextItems: blocks.reduce((count, block) => count + block.spans.length, 0),
     sourceCharacterCount: original.length, renderedCharacterCount: rendered.length,
     coverageRatio: original.length ? rendered.length / original.length : 0,
