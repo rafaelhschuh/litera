@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import express, { type NextFunction, type Request, type Response } from 'express'
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { z } from 'zod'
-import { structurePdfText, type PdfReflowBlock } from '../shared/pdf-reflow.js'
+import { assessPdfAdaptation, structurePdfText, type PdfReflowBlock } from '../shared/pdf-reflow.js'
 import type { ReadingLocator } from '../shared/progress.js'
 import { normalizeProgress } from '../shared/progress.js'
 import { createSession, deleteSession, parseCookies, requireAdmin, requireUser, sessionMiddleware, type SessionUser } from './auth.js'
@@ -17,7 +18,8 @@ import { createScanJob, enqueueScanJob, mapScanJob, resumeScanJobs, runScanJob }
 import { configuredMetadataProvider } from './metadata.js'
 
 const projectRoot = process.cwd()
-const pdfReflowCache = new Map<string, { pageCount: number; blocks: PdfReflowBlock[] }>()
+const pdfStandardFontDataUrl = `${path.join(path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'standard_fonts')}${path.sep}`
+const pdfReflowCache = new Map<string, { pageCount: number; blocks: PdfReflowBlock[]; adaptation: ReturnType<typeof assessPdfAdaptation> }>()
 
 const loginSchema = z.object({ username: z.string().trim().min(1).max(100), password: z.string().min(1).max(1024) })
 const librarySchema = z.object({ name: z.string().trim().min(1).max(120), path: z.string().trim().min(1).max(4096), rescanIntervalMinutes: z.number().int().min(0).max(10_080).default(0) })
@@ -71,14 +73,20 @@ function locateBookFile(db: LiteraDatabase, bookId: number, user: SessionUser): 
 
 function streamFile(req: Request, res: Response, filePath: string, next: NextFunction): void {
   const stat = fs.statSync(filePath)
-  const range = req.headers.range?.match(/^bytes=(\d+)-(\d*)$/)
+  res.setHeader('Accept-Ranges', 'bytes')
+  // A multipart/unknown range is deliberately ignored with a complete 200 response.
+  const range = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/)
   let start = 0; let end = stat.size - 1
-  if (range) {
-    start = Number(range[1]); end = range[2] ? Math.min(Number(range[2]), end) : end
-    if (start > end || start >= stat.size) { res.status(416).setHeader('Content-Range', `bytes */${stat.size}`); res.end(); return }
+  if (range && (range[1] || range[2])) {
+    if (!range[1]) start = Math.max(0, stat.size - Number(range[2]))
+    else { start = Number(range[1]); if (range[2]) end = Math.min(Number(range[2]), end) }
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= stat.size) {
+      res.status(416).setHeader('Content-Range', `bytes */${stat.size}`); res.end(); return
+    }
     res.status(206); res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`)
   }
-  res.setHeader('Accept-Ranges', 'bytes'); res.setHeader('Content-Length', String(end - start + 1))
+  res.setHeader('Content-Length', String(Math.max(0, end - start + 1)))
+  if (!stat.size || req.method === 'HEAD') { res.end(); return }
   fs.createReadStream(filePath, { start, end }).once('error', next).pipe(res)
 }
 
@@ -113,7 +121,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.3.2', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.4.0', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -173,6 +181,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     if (!file || !fs.existsSync(file.filePath)) { apiError(res, 404, 'BOOK_FILE_NOT_FOUND', 'Book file is unavailable'); return }
     res.type(file.format === 'epub' ? 'application/epub+zip' : 'application/pdf')
     res.setHeader('Content-Disposition', 'inline')
+    res.setHeader('Cache-Control', 'private, no-cache')
     streamFile(req, res, file.filePath, next)
   })
   app.get('/api/v1/books/:id/cover', requireUser, async (req, res, next) => {
@@ -213,7 +222,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       const palette = theme === 'dark' ? { background: '#20201e', color: '#eeeeea' } : theme === 'sepia' ? { background: '#f4ead6', color: '#302a21' } : { background: '#ffffff', color: '#272520' }
       const file = locateBookFile(db, Number(req.params.id), req.user!); if (!file || file.format !== 'epub') { apiError(res, 404, 'EPUB_NOT_FOUND', 'EPUB is unavailable'); return }
       const html = (await readEpubChapter(file.filePath, href)).replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/gi, (_match, before, source, after) => `${before}/api/v1/books/${req.params.id}/epub/asset?chapter=${encodeURIComponent(href)}&src=${encodeURIComponent(source)}${after}`)
-      res.type('html').send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;background:${palette.background};touch-action:pan-y}body{position:static;overflow-wrap:anywhere;color:${palette.color}}.reader-document{width:min(${measure}rem,100%);min-height:100%;margin:0 auto;padding:clamp(5rem,10vh,7rem) clamp(1rem,4vw,3rem) 6rem;font:${18 * scale / 100}px/${lineHeight} Georgia,serif}*,*:before,*:after{box-sizing:border-box;max-width:100%}img,svg,video,canvas{display:block;max-width:100%;height:auto;margin:auto}a{color:inherit;text-decoration:underline;text-underline-offset:.15em}@media(min-width:1100px) and (orientation:landscape){.reader-document{width:min(${measure + 24}rem,calc(100% - 4rem));column-count:2;column-width:28em;column-gap:clamp(4rem,7vw,8rem);column-rule:1px solid color-mix(in srgb,currentColor 14%,transparent)}h1,h2,h3,p,figure,blockquote{break-inside:avoid-column}}</style></head><body><main class="reader-document">${html}</main></body></html>`)
+      res.type('html').send(`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;background:${palette.background};touch-action:pan-y}body{position:static;overflow-wrap:anywhere;color:${palette.color}}.reader-document{width:min(${measure}rem,100%);min-height:100%;margin:0 auto;padding:clamp(5rem,10vh,7rem) clamp(1rem,4vw,3rem) 6rem;font:${18 * scale / 100}px/${lineHeight} Georgia,serif}*,*:before,*:after{box-sizing:border-box;max-width:100%}img,svg,video,canvas{display:block;max-width:100%;height:auto;margin:auto}a{color:inherit;text-decoration:underline;text-underline-offset:.15em}@media(min-width:1100px) and (orientation:landscape){.reader-document{width:min(${measure + 24}rem,calc(100% - 4rem));column-count:2;column-width:28em;column-gap:clamp(4rem,7vw,8rem);column-rule:1px solid color-mix(in srgb,currentColor 14%,transparent)}h1,h2,h3,p,figure,blockquote{break-inside:avoid-column}}</style></head><body><main class="reader-document">${html}</main></body></html>`)
     } catch (error) { next(error) }
   })
   app.get('/api/v1/books/:id/epub/asset', requireUser, async (req, res, next) => {
@@ -244,13 +253,13 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       const cacheKey = `${file.filePath}:${stat.mtimeMs}:${pageNumber}`
       const cached = pdfReflowCache.get(cacheKey)
       if (cached) { res.json({ page: pageNumber, ...cached, cached: true }); return }
-      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false })
+      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false, standardFontDataUrl: pdfStandardFontDataUrl })
       const document = await task.promise
       try {
         const safePage = Math.min(document.numPages, pageNumber)
         const page = await document.getPage(safePage)
         const content = await page.getTextContent()
-        await page.getOperatorList()
+        const operators = await page.getOperatorList()
         const viewport = page.getViewport({ scale: 1 })
         const styles = { ...(content.styles as any) }
         for (const item of content.items as any[]) {
@@ -261,7 +270,9 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
           } catch { /* a missing embedded font still has usable size information */ }
         }
         const blocks = structurePdfText(content.items as any[], styles, viewport.width, viewport.height)
-        const value = { pageCount: document.numPages, blocks }
+        const graphics = new Set(Object.entries(OPS).filter(([name]) => /paint|shadingFill|constructPath/i.test(name)).map(([, value]) => value))
+        const adaptation = assessPdfAdaptation(content.items as any[], blocks, operators.fnArray.some(op => graphics.has(op)))
+        const value = { pageCount: document.numPages, blocks, adaptation }
         pdfReflowCache.set(cacheKey, value)
         if (pdfReflowCache.size > 500) pdfReflowCache.delete(pdfReflowCache.keys().next().value!)
         res.json({ page: safePage, ...value, cached: false })
@@ -555,7 +566,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.3.2', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.4.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

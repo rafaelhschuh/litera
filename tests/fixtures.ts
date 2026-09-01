@@ -30,3 +30,32 @@ export async function writePdf(filePath: string, title = 'Caderno PDF', author =
   pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`
   await fs.writeFile(filePath, pdf)
 }
+
+export async function writeFidelityPdf(filePath: string, paddingBytes = 0): Promise<void> {
+  const text = [
+    'BT /F1 12 Tf 40 775 Td (INICIO: paragrafo antes da nota.) Tj ET',
+    ...Array.from({ length: 35 }, (_, index) => `BT /F1 12 Tf 40 ${740 - index * 18} Td (Paragrafo ${index}: conteudo integral para leitura adaptada.) Tj ET`),
+    'BT /F1 12 Tf 40 390 Td (MEIO: toma nota disto.) Tj ET',
+    'BT /F1 12 Tf 40 20 Td (FINAL: capacidade de continuar o paragrafo completo.) Tj ET',
+  ].sort((a, b) => Number(b.match(/40 (\d+) Td/)?.[1]) - Number(a.match(/40 (\d+) Td/)?.[1])).join('\n')
+  const graphic = 'q 180 0 0 180 80 300 cm /Im1 Do Q\nBT /F1 18 Tf 40 700 Td (Pagina com imagem preservada) Tj ET'
+  const stream = (value: string) => `<< /Length ${Buffer.byteLength(value)} >>\nstream\n${value}\nendstream`
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    stream(text), '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 8 0 R >> >> /Contents 7 0 R >>',
+    stream(graphic),
+    '<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length 7 >>\nstream\nC27B90>\nendstream',
+    '<< /Title (Fidelidade PDF) >>',
+  ]
+  if (paddingBytes) objects.push(stream('0'.repeat(paddingBytes)))
+  let result = '%PDF-1.4\n'; const offsets = [0]
+  objects.forEach((object, index) => { offsets.push(Buffer.byteLength(result)); result += `${index + 1} 0 obj\n${object}\nendobj\n` })
+  const xref = Buffer.byteLength(result)
+  result += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  for (const offset of offsets.slice(1)) result += `${String(offset).padStart(10, '0')} 00000 n \n`
+  result += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 9 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  await fs.writeFile(filePath, result)
+}

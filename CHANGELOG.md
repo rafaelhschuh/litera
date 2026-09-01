@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-09-01
+
+- Reader EPUB estabilizado no Safari/WebKit: touch, seleção, notas, navegação e restauração de posição.
+- Troca de capítulos preserva conteúdo anterior e usa transição independente do iframe.
+- PDF adaptado preserva texto das bordas, verifica cobertura e oferece fallback original para páginas inseguras ou com imagens.
+- Ajustes de viewport, safe areas, feedback touch e ícones/metadados PWA.
+- Testes Chromium/WebKit adicionados aos gates de CI e release.
+- Leitura offline permanece fora do escopo desta etapa.
+
 ## 0.3.2 — 2026-09-01
 
 - Primeira página de PDFs renderizada no backend e armazenada como capa JPEG otimizada durante o scan.

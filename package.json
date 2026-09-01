@@ -1,6 +1,6 @@
 {
   "name": "litera",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "license": "GPL-3.0-only",
   "private": true,
   "type": "module",
@@ -19,7 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "vitest run tests/smoke.test.ts",
-    "verify": "npm run typecheck && npm run lint && npm test && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.8",
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",
+    "@playwright/test": "^1.62.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.3",
     "@types/node": "^22.18.0",

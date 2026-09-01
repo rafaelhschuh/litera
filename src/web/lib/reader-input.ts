@@ -5,9 +5,10 @@ import {
 } from '../../shared/reader-interaction'
 
 type Point = { x: number; y: number }
-type PointerState = Point & { startX: number; startY: number; startedAt: number; pointerType: string }
+type PointerState = Point & { startX: number; startY: number; startedAt: number; pointerType: string; moved: boolean }
 
 type ReaderInputOptions = {
+  onEvent?: (name: string) => void
   width: () => number
   selectionText: () => string
   canPan: () => boolean
@@ -50,8 +51,8 @@ export function attachReaderInput(target: Document | HTMLElement, options: Reade
   let mode: ReaderInteractionMode = 'idle'
   let pinchStartDistance = 0
   let pinchScale = 1
-  let lastTap: (Point & { at: number }) | undefined
   let suppressNavigationUntil = 0
+  let lastTouch = -Infinity
 
   const setMode = (next: ReaderInteractionMode) => {
     if (mode === next) return
@@ -66,7 +67,9 @@ export function attachReaderInput(target: Document | HTMLElement, options: Reade
 
   const down = (id: number, point: Point, eventTarget: EventTarget | null, pointerType: string) => {
     const now = performance.now()
-    pointers.set(id, { ...point, startX: point.x, startY: point.y, startedAt: now, pointerType })
+    if (pointerType === 'touch') lastTouch = now
+    else if (pointerType === 'mouse' && now - lastTouch < 800) return
+    pointers.set(id, { ...point, startX: point.x, startY: point.y, startedAt: now, pointerType, moved: false })
     if (pointers.size >= 2) {
       const active = [...pointers.values()].slice(0, 2)
       pinchStartDistance = distanceOf(active)
@@ -103,6 +106,7 @@ export function attachReaderInput(target: Document | HTMLElement, options: Reade
     const deltaX = current.x - current.startX
     const deltaY = current.y - current.startY
     if (Math.hypot(deltaX, deltaY) <= READER_GESTURE_LIMITS.tapDistance) return
+    current.moved = true
     if (options.selectionText().trim()) setMode('selecting')
     else if (options.canPan()) setMode('panning')
     else if (Math.abs(deltaY) > Math.abs(deltaX) * READER_GESTURE_LIMITS.directionDominance) setMode('scrolling')
@@ -138,20 +142,17 @@ export function attachReaderInput(target: Document | HTMLElement, options: Reade
     if (performance.now() < suppressNavigationUntil) { if (!pointers.size) setMode('idle'); return }
     if (mode !== 'ui-interaction' && options.canSwipe() && gesture === 'swipe-next') options.onSwipe('next')
     else if (mode !== 'ui-interaction' && options.canSwipe() && gesture === 'swipe-previous') options.onSwipe('previous')
-    else if (mode !== 'ui-interaction' && gesture === 'tap') {
-      const now = performance.now()
-      const isDoubleTap = lastTap && now - lastTap.at < 320 && Math.hypot(point.x - lastTap.x, point.y - lastTap.y) < 28
-      if (isDoubleTap) lastTap = undefined
-      else {
-        lastTap = { ...point, at: now }
-        options.onTap(point.x, options.width())
-      }
+    else if (mode === 'tap-candidate' && !current.moved && gesture === 'tap') {
+      options.onTap(point.x, options.width())
     }
     if (!pointers.size) setMode('idle')
   }
 
+  add('selectionchange', () => { if (pointers.size && options.selectionText().trim()) setMode('selecting') })
+  if (options.onEvent) for (const name of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'click', 'selectionchange'] as const) add(name, () => options.onEvent?.(name), { passive: true })
+
   if (ownerWindow?.PointerEvent) {
-    add('pointerdown', (event: PointerEvent) => down(event.pointerId, { x: event.clientX, y: event.clientY }, event.target, event.pointerType), { passive: true })
+    add('pointerdown', (event: PointerEvent) => { if (event.button === 0) down(event.pointerId, { x: event.clientX, y: event.clientY }, event.composedPath()[0] ?? event.target, event.pointerType) }, { passive: true })
     add('pointermove', (event: PointerEvent) => move(event.pointerId, { x: event.clientX, y: event.clientY }), { passive: true })
     add('pointerup', (event: PointerEvent) => up(event.pointerId, { x: event.clientX, y: event.clientY }), { passive: true })
     add('pointercancel', (event: PointerEvent) => up(event.pointerId, { x: event.clientX, y: event.clientY }, true), { passive: true })
@@ -168,7 +169,7 @@ export function attachReaderInput(target: Document | HTMLElement, options: Reade
     add('touchcancel', (event: TouchEvent) => {
       for (const touch of event.changedTouches) up(touch.identifier, { x: touch.clientX, y: touch.clientY }, true)
     }, { passive: true })
-    add('mousedown', (event: MouseEvent) => down(1, { x: event.clientX, y: event.clientY }, event.target, 'mouse'), { passive: true })
+    add('mousedown', (event: MouseEvent) => { if (event.button === 0) down(1, { x: event.clientX, y: event.clientY }, event.target, 'mouse') }, { passive: true })
     add('mousemove', (event: MouseEvent) => move(1, { x: event.clientX, y: event.clientY }), { passive: true })
     add('mouseup', (event: MouseEvent) => up(1, { x: event.clientX, y: event.clientY }), { passive: true })
   }

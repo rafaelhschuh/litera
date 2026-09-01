@@ -11,10 +11,10 @@ defineProps<{
 </script>
 
 <template>
-  <article class="reader-text-surface" :class="`reader-text-surface--${theme}`">
+  <article :aria-busy="loading" class="reader-text-surface" :class="`reader-text-surface--${theme}`">
     <div class="reader-document" :style="contentStyle">
       <p v-if="loading" class="reader-text-status">Preparando esta página…</p>
-      <component :is="block.kind" v-for="(block, index) in blocks" v-else :key="index" :class="{ 'reader-document__center': block.align === 'center', 'reader-document__section': block.spaced }">
+      <component :is="block.kind" v-for="(block, index) in blocks" :key="index" :class="{ 'reader-document__center': block.align === 'center', 'reader-document__section': block.spaced }">
         <span v-for="(span, spanIndex) in block.spans" :key="spanIndex" :class="{ 'reader-document__bold': span.bold, 'reader-document__italic': span.italic }">{{ span.text }}</span>
       </component>
       <p v-if="!loading && !blocks.length">Esta página não tem texto selecionável.</p>

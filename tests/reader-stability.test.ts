@@ -94,7 +94,7 @@ describe('PDF adapted reading structure', () => {
     ] })
   })
 
-  it('removes small running headers and footers without removing page titles', () => {
+  it('preserves text at both page edges including headers and footers', () => {
     const blocks = structurePdfText([
       { str: 'Livro · 12', fontName: 'Body', transform: [10, 0, 0, 10, 40, 790], width: 70, hasEOL: true },
       { str: 'Título do capítulo', fontName: 'Title-Bold', transform: [24, 0, 0, 24, 120, 700], width: 240, hasEOL: true },
@@ -102,7 +102,7 @@ describe('PDF adapted reading structure', () => {
       { str: 'Editora', fontName: 'Body', transform: [10, 0, 0, 10, 250, 20], width: 45, hasEOL: true },
     ], {}, 500, 800)
 
-    expect(blocks.map(block => block.spans.map(span => span.text).join(''))).toEqual(['Título do capítulo', 'Texto principal'])
+    expect(blocks.map(block => block.spans.map(span => span.text).join(''))).toEqual(['Livro · 12', 'Título do capítulo', 'Texto principal', 'Editora'])
   })
 })
 

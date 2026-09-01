@@ -17,6 +17,7 @@ Use short-lived branches or worktrees with required checks before merge when mul
 - typecheck;
 - testes unitários e de integração;
 - build de produção;
+- E2E Chromium e WebKit com instalação dos motores pelo Playwright;
 - build da imagem Docker.
 
 Falhas não são ignoradas. O workflow normal tem somente `contents: read`.

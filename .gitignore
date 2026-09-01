@@ -40,3 +40,7 @@ temp/
 Thumbs.db
 .idea/
 .vscode/
+
+# Browser verification artifacts
+test-results/
+playwright-report/

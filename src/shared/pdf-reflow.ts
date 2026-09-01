@@ -49,7 +49,7 @@ function readableText(raw: string, previous: string): string {
   return ` ${text}`
 }
 
-export function structurePdfText(items: PdfTextItem[], styles: Record<string, PdfTextStyle> = {}, pageWidth = 1, pageHeight = 0): PdfReflowBlock[] {
+export function structurePdfText(items: PdfTextItem[], styles: Record<string, PdfTextStyle> = {}, pageWidth = 1, _pageHeight = 0): PdfReflowBlock[] {
   const meaningful = items.filter(item => item.str?.trim())
   const bodySize = median(meaningful.map(fontSize))
   const lines: ReflowLine[] = []
@@ -78,9 +78,7 @@ export function structurePdfText(items: PdfTextItem[], styles: Record<string, Pd
   }
   if (line?.spans.length) lines.push(line)
 
-  const contentLines = pageHeight > 0
-    ? lines.filter(current => !(current.fontSize <= bodySize * 1.15 && (current.y < pageHeight * .09 || current.y > pageHeight * .91)))
-    : lines
+  const contentLines = lines
 
   return contentLines.map((current, index) => {
     const text = current.spans.map(span => span.text).join('').trim()
@@ -93,4 +91,27 @@ export function structurePdfText(items: PdfTextItem[], styles: Record<string, Pd
     const verticalGap = previous ? Math.abs(previous.y - current.y) : 0
     return { kind, align, spaced: Boolean(previous && verticalGap > Math.max(previous.fontSize, current.fontSize) * 1.75), spans: current.spans }
   })
+}
+
+// Whitespace is presentation; every other character must survive adaptation.
+export function assessPdfAdaptation(items: PdfTextItem[], blocks: PdfReflowBlock[], hasGraphics: boolean) {
+  const normalize = (text: string) => text.replace(/\s+/g, '')
+  const source = items.filter(item => item.str?.trim())
+  const original = normalize(source.map(item => item.str).join(''))
+  const rendered = normalize(blocks.flatMap(block => block.spans.map(span => span.text)).join(''))
+  const rotated = source.some(item => Math.abs(item.transform?.[1] ?? 0) > .01 || Math.abs(item.transform?.[2] ?? 0) > .01)
+  // Upward jumps in extraction order can indicate columns or positioned fragments.
+  const fragmented = source.some((item, index) => {
+    const previous = source[index - 1]; if (!previous) return false
+    const sameLine = Math.abs((item.transform?.[5] ?? 0) - (previous.transform?.[5] ?? 0)) < 2
+    const gap = (item.transform?.[4] ?? 0) - (previous.transform?.[4] ?? 0) - (previous.width ?? 0)
+    return sameLine && (gap > fontSize(item) * 4 || gap < -fontSize(item))
+  })
+  const uncertainOrder = source.some((item, index) => index > 0 && (item.transform?.[5] ?? 0) > (source[index - 1]?.transform?.[5] ?? 0) + Math.max(4, fontSize(item)))
+  return {
+    safe: original.length > 0 && original === rendered && !hasGraphics && !rotated && !uncertainOrder && !fragmented,
+    sourceTextItems: source.length, renderedTextItems: blocks.reduce((count, block) => count + block.spans.length, 0),
+    sourceCharacterCount: original.length, renderedCharacterCount: rendered.length,
+    coverageRatio: original.length ? rendered.length / original.length : 0,
+  }
 }
