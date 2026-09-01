@@ -55,10 +55,19 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   await page.getByRole('button', { name: '+', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
   await expect.poll(async () => active(page).locator('.reader-document').evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(19.8, 2)
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await page.keyboard.press('ArrowRight')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   const savedUrl = page.url()
   const bookId = new URL(savedUrl).pathname.split('/').pop()
-  await expect.poll(async () => (await (await page.request.get(`/api/v1/books/${bookId}/progress`)).json()).progress.locator.elementIndex).toBeGreaterThan(0)
+  const visibleLocator = await active(page).locator('body').evaluate(() => {
+    const elements = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,figure,img')]
+    const elementIndex = elements.findIndex(el => el.getBoundingClientRect().bottom > Math.min(48, innerHeight * .1))
+    return { elementIndex, offset: Math.round(-elements[elementIndex]!.getBoundingClientRect().top) }
+  })
+  expect(visibleLocator.elementIndex).toBeGreaterThan(0)
+  // Wait for this exact viewport, not any earlier nonzero debounced save.
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/books/${bookId}/progress`)).json()).progress.locator).toMatchObject(visibleLocator)
   const saved = (await (await page.request.get(`/api/v1/books/${bookId}/progress`)).json()).progress.locator
   await page.reload()
   await expect(active(page).locator('.reader-document')).toBeVisible()
