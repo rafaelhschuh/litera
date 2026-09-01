@@ -6,8 +6,7 @@ import { createCanvas } from '@napi-rs/canvas'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { z } from 'zod'
-import { assessPdfAdaptation, structurePdfText, type PdfReflowBlock, type PdfReflowFigure } from '../shared/pdf-reflow.js'
-import { pdfFigures, pdfGraphicsOperations } from './pdf-figures.js'
+import { preparePdf, preparedPdfDirectory, readPreparedPdfPage } from './pdf-preparation.js'
 import type { ReadingLocator } from '../shared/progress.js'
 import { normalizeProgress } from '../shared/progress.js'
 import { createSession, deleteSession, parseCookies, requireAdmin, requireUser, sessionMiddleware, type SessionUser } from './auth.js'
@@ -22,7 +21,6 @@ import { configuredMetadataProvider } from './metadata.js'
 const projectRoot = process.cwd()
 const pdfStandardFontDataUrl = `${path.join(path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'standard_fonts')}${path.sep}`
 const pdfCMapUrl = pdfStandardFontDataUrl.replace(/standard_fonts[/\\]$/, 'cmaps/')
-const pdfReflowCache = new Map<string, { pageCount: number; blocks: PdfReflowBlock[]; figures: PdfReflowFigure[]; adaptation: ReturnType<typeof assessPdfAdaptation> }>()
 
 const loginSchema = z.object({ username: z.string().trim().min(1).max(100), password: z.string().min(1).max(1024) })
 const librarySchema = z.object({ name: z.string().trim().min(1).max(120), path: z.string().trim().min(1).max(4096), rescanIntervalMinutes: z.number().int().min(0).max(10_080).default(0) })
@@ -150,6 +148,18 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   })
   app.get('/api/v1/auth/me', requireUser, (req, res) => res.json({ user: req.user }))
   resumeScanJobs(db, config)
+  // Upgrade existing libraries without waiting for a scheduled/manual rescan.
+  const existingPdfs = db.prepare("SELECT l.path AS root, f.relative_path AS relative FROM book_files f JOIN libraries l ON l.id=f.library_id JOIN books b ON b.id=f.book_id WHERE b.format='pdf' AND f.status='available'").all() as Array<{ root: string; relative: string }>
+  setImmediate(() => { void (async () => {
+    for (const file of existingPdfs) {
+      try {
+        const library = validateLibraryPath(file.root, config)
+        const source = fs.realpathSync(path.join(library, file.relative))
+        if (!source.startsWith(library + path.sep) || fs.statSync(source).size > config.maxBookBytes) continue
+        await preparePdf(source, config.dataDir)
+      } catch (error) { console.error(JSON.stringify({ event: 'pdf_preparation_failed', message: error instanceof Error ? error.message : 'Preparation failed' })) }
+    }
+  })() })
 
   app.get('/api/v1/home', requireUser, (req, res) => {
     const continueReading = db.prepare(`${bookSelect()} WHERE p.progress_ratio > 0 AND p.completed=0 AND p.dismissed_from_continue=0 GROUP BY b.id ORDER BY p.last_read_at DESC LIMIT 12`).all(...bookParams(req)).map(mapBook)
@@ -253,35 +263,19 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       if (!file || file.format !== 'pdf') { apiError(res, 404, 'PDF_NOT_FOUND', 'PDF is unavailable'); return }
       const requestedPage = Number(req.query.page)
       const pageNumber = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
-      const stat = fs.statSync(file.filePath)
-      const cacheKey = `${file.filePath}:${stat.mtimeMs}:${pageNumber}`
-      const cached = pdfReflowCache.get(cacheKey)
-      if (cached) { res.json({ page: pageNumber, ...cached, cached: true }); return }
-      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false, standardFontDataUrl: pdfStandardFontDataUrl, cMapUrl: pdfCMapUrl, cMapPacked: true })
-      const document = await task.promise
-      try {
-        const safePage = Math.min(document.numPages, pageNumber)
-        const page = await document.getPage(safePage)
-        const content = await page.getTextContent()
-        const operators = await page.getOperatorList()
-        const viewport = page.getViewport({ scale: 1 })
-        const styles = { ...(content.styles as any) }
-        for (const item of content.items as any[]) {
-          if (!item.fontName || styles[item.fontName]?.sourceName) continue
-          try {
-            const font = (page as any).commonObjs?.get?.(item.fontName)
-            styles[item.fontName] = { ...styles[item.fontName], sourceName: [font?.name, font?.fallbackName].filter(Boolean).join(' ') }
-          } catch { /* a missing embedded font still has usable size information */ }
-        }
-        const blocks = structurePdfText(content.items as any[], styles, viewport.width, viewport.height)
-        const hasGraphics = operators.fnArray.some(op => pdfGraphicsOperations.has(op))
-        const adaptation = assessPdfAdaptation(content.items as any[], blocks, hasGraphics)
-        const figures = hasGraphics && blocks.length ? await pdfFigures(page, blocks) : []
-        const value = { pageCount: document.numPages, blocks, figures, adaptation }
-        pdfReflowCache.set(cacheKey, value)
-        if (pdfReflowCache.size > 500) pdfReflowCache.delete(pdfReflowCache.keys().next().value!)
-        res.json({ page: safePage, ...value, cached: false })
-      } finally { await task.destroy() }
+      res.json(await readPreparedPdfPage(file.filePath, config.dataDir, pageNumber))
+    } catch (error) { next(error) }
+  })
+
+  app.get('/api/v1/books/:id/pdf/figure', requireUser, async (req, res, next) => {
+    try {
+      const file = locateBookFile(db, Number(req.params.id), req.user!)
+      if (!file || file.format !== 'pdf') { apiError(res, 404, 'PDF_NOT_FOUND', 'PDF is unavailable'); return }
+      const asset = typeof req.query.asset === 'string' ? req.query.asset : ''
+      if (!/^(?:[1-9]\d*-\d+\.png|font-[a-f0-9]+\.ttf)$/.test(asset)) { apiError(res, 400, 'INVALID_ASSET', 'Invalid figure'); return }
+      const directory = await preparedPdfDirectory(file.filePath, config.dataDir)
+      res.setHeader('Cache-Control', 'private, no-cache')
+      res.sendFile(asset, { root: directory }, error => { if (error) { if ((error as any).status === 404) apiError(res, 404, 'ASSET_NOT_FOUND', 'Figure unavailable'); else next(error) } })
     } catch (error) { next(error) }
   })
 

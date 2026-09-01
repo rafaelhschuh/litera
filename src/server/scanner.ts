@@ -5,6 +5,7 @@ import path from 'node:path'
 import { createCanvas } from '@napi-rs/canvas'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { AppConfig } from './config.js'
+import { preparePdf } from './pdf-preparation.js'
 import { storeOptimizedCover } from './covers.js'
 import type { LiteraDatabase } from './database.js'
 import { extractEpub } from './epub.js'
@@ -109,6 +110,10 @@ export async function scanLibrary(db: LiteraDatabase, config: AppConfig, library
         db.prepare(`INSERT INTO book_files(library_id,book_id,identity,relative_path,size,modified_ms,fingerprint,status,ingestion_error,last_seen_job_id) VALUES (?,?,?,?,?,?,?,'error',?,?)`).run(libraryId, book.lastInsertRowid, identity, relative, stat.size, Math.round(stat.mtimeMs), fingerprint, message, jobId ?? null)
       }
       continue
+    }
+    if (format === 'pdf') {
+      try { await preparePdf(filePath, config.dataDir) }
+      catch (error) { report.errors.push({ file: relative, message: 'PDF preparation: ' + (error instanceof Error ? error.message : 'failed') }) }
     }
     let existing = db.prepare('SELECT f.id, f.book_id AS bookId, f.size, f.modified_ms AS modifiedMs, f.relative_path AS relativePath, f.fingerprint, b.cover_path AS coverPath FROM book_files f JOIN books b ON b.id=f.book_id WHERE f.library_id = ? AND f.identity = ?').get(libraryId, identity) as any
     if (!existing) {

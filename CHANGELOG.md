@@ -1,5 +1,13 @@
 # Changelog
 
+## Não lançado
+
+- Descoberta prepara texto, imagens isoladas e fontes necessárias em cache persistente; bibliotecas existentes são preparadas em segundo plano ao iniciar.
+- Leitor adaptado abre sem baixar o PDF original; imagens são servidas prontas, sem renderização durante a leitura.
+- Caminhos de recorte deixam de virar falsas ilustrações de página inteira.
+- Glifos sem Unicode explícito preservam a aparência pela fonte embutida em spans adaptáveis, sem substituir letras por suposição. Copiar ou buscar esses glifos continua limitado pela ausência de Unicode no arquivo.
+- Regressões verificam fontes, cache idempotente, invalidação, imagens e abertura direta do leitor adaptado.
+
 ## 0.4.2 — 2026-09-01
 
 - Texto adaptado reconstrói palavras, acentos, ligaturas, parágrafos e colunas sem descartar bordas da página. CMaps locais são fornecidos ao extrator.

@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 
-async function openBook(page: Page, title: string) {
+async function openBook(page: Page, title: string, adapted = false) {
   await page.goto('/login')
   await page.getByLabel('Usuário', { exact: true }).fill('admin')
   await page.getByLabel('Senha', { exact: true }).fill('test-password-strong-123')
@@ -14,7 +14,9 @@ async function openBook(page: Page, title: string) {
   const detail = await (await page.request.get(`/api/v1/books/${id}`)).json()
   const locator = detail.book.format === 'epub' ? { type: 'epub-cfi', cfi: 'epubcfi(/6/2!/4/2)', chapterHref: 'chapter-1.xhtml', elementIndex: 0, offset: 0 } : { type: 'pdf-page', page: 1 }
   await page.request.put(`/api/v1/books/${id}/progress`, { data: { format: detail.book.format, progressRatio: 0, locator } })
-  await page.getByRole('link', { name: /Começar leitura|Continuar leitura/ }).click()
+  const readerLink = page.getByRole('link', { name: /Começar leitura|Continuar leitura/ })
+  if (adapted) await page.goto((await readerLink.getAttribute('href'))!.split('?')[0] + '?mode=epub')
+  else await readerLink.click()
 }
 const active = (page: Page) => page.frameLocator('.epub-stage:not(.epub-stage--preparing)')
 async function position(page: Page) {
@@ -79,19 +81,19 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
 test.describe('PDF adaptation', () => {
 // Fault injection must reach the page request instead of an existing service worker.
 test.use({ serviceWorkers: 'block' })
-test('PDF: readable paragraphs, screen navigation, restore and cropped illustrations', async ({ page }) => {
+test('PDF: direct adapted opening, readable paragraphs, restore and extracted illustrations', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   await page.setViewportSize({ width: 390, height: 844 })
-  await openBook(page, 'Fidelidade PDF')
-  await expect(page.locator('.pdf-canvas').first()).toBeVisible()
-  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
-  await page.getByRole('button', { name: 'Texto adaptado', exact: true }).click()
+  const pdfRequests: string[] = []
+  page.on('request', request => { if (/\/books\/\d+\/(?:content|pdf\/page-image)(?:\?|$)/.test(request.url())) pdfRequests.push(request.url()) })
+  await openBook(page, 'Fidelidade PDF', true)
   await expect(page.locator('.reader-document')).toContainText('INICIO:')
   await expect(page.locator('.reader-document')).toContainText('MEIO:')
   await expect(page.locator('.reader-document')).toContainText('FINAL: capacidade de continuar o paragrafo completo.')
   await expect(page.locator('.reader-document')).toContainText('A mãe aprendeu: atenção, ação e coração.')
   await expect(page.locator('.reader-document img')).toHaveCount(0)
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  expect(pdfRequests).toEqual([])
   await page.screenshot({ path: `test-results/pdf-adapted-text-${test.info().project.name}.png` })
   const stage = page.locator('.reader-stage')
   const scroll = () => stage.evaluate(el => el.scrollTop)
@@ -120,7 +122,7 @@ test('PDF: readable paragraphs, screen navigation, restore and cropped illustrat
   await expect(page.locator('.reader-document')).toContainText('Pagina com imagem preservada')
   await expect(page.getByAltText('Ilustração da página')).toBeVisible()
   await expect(page.locator('.pdf-canvas')).toHaveCount(0)
-  await expect(page.getByAltText('Ilustração da página')).toHaveAttribute('src', /crop=/)
+  await expect(page.getByAltText('Ilustração da página')).toHaveAttribute('src', /\/pdf\/figure\?page=2&asset=/)
   await expect(page.getByAltText('Conteúdo visual preservado desta página')).toHaveCount(0)
   await page.screenshot({ path: 'test-results/pdf-adapted-figure-' + test.info().project.name + '.png' })
   while (await stage.evaluate(el => el.scrollTop < el.scrollHeight - el.clientHeight - 2)) await page.keyboard.press('PageDown')
@@ -154,8 +156,11 @@ test('PDF: readable paragraphs, screen navigation, restore and cropped illustrat
   await expect(stage).toHaveAttribute('aria-busy', 'false')
   await expect.poll(async () => Math.abs(await scroll() - figureScroll)).toBeLessThan(4)
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  expect(pdfRequests).toEqual([])
   await page.getByRole('button', { name: 'Documento original', exact: true }).click()
   await expect(page.locator('.pdf-page').first()).toHaveAttribute('data-page', '2')
+  expect(pdfRequests.some(url => url.includes('/content'))).toBe(true)
+  expect(pdfRequests.some(url => url.includes('/pdf/page-image'))).toBe(false)
   expect(await page.locator('.pdf-canvas').evaluate((canvas: HTMLCanvasElement) => [...canvas.getContext('2d')!.getImageData(Math.floor(canvas.width * .3), Math.floor(canvas.height * .5), 1, 1).data])).toEqual([194, 123, 144, 255])
   await page.locator('.reader-stage').evaluate(el => { el.scrollTop = 350 })
   await page.screenshot({ path: `test-results/pdf-${test.info().project.name}.png` })

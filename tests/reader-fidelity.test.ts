@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import sharp from 'sharp'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assessPdfAdaptation, structurePdfText } from '../src/shared/pdf-reflow.js'
+import { preparePdf, preparedPdfDirectory, readPreparedPdfPage } from '../src/server/pdf-preparation.js'
 import { writeFidelityPdf } from './fixtures.js'
 import { login, testContext } from './setup.js'
 
@@ -19,13 +20,17 @@ describe('document fidelity and delivery', () => {
     const page = (await context.agent.get(`/api/v1/books/${book.id}/pdf/reflow?page=1`)).body
     const text = page.blocks.flatMap((block: any) => block.spans.map((span: any) => span.text)).join(' ')
     expect(text).toContain('INICIO:'); expect(text).toContain('MEIO:'); expect(text).toContain('FINAL: capacidade de continuar o paragrafo completo.')
+    expect(page.cached).toBe(true)
+    expect(page.figures).toEqual([])
     expect(page.adaptation).toMatchObject({ safe: true, coverageRatio: 1 })
     const image = (await context.agent.get(`/api/v1/books/${book.id}/pdf/reflow?page=2`)).body
     expect(image.adaptation).toMatchObject({ safe: true, textComplete: true, needsVisualReference: false, hasGraphics: true, coverageRatio: 1 })
     expect(image.figures).toHaveLength(1)
     expect(image.figures[0].crop[2]).toBeLessThan(.4)
     expect(image.figures[0].crop[3]).toBeLessThan(.3)
-    const cropped = await context.agent.get(`/api/v1/books/${book.id}/pdf/page-image?page=2&crop=${image.figures[0].crop.join(',')}`)
+    const cropped = await context.agent.get(`/api/v1/books/${book.id}/pdf/figure?page=2&asset=${image.figures[0].asset}`)
+    expect(cropped.status).toBe(200)
+    expect((await context.agent.get(`/api/v1/books/${book.id}/pdf/figure?asset=../secret`)).status).toBe(400)
     const dimensions = await sharp(cropped.body).metadata()
     expect(dimensions.width).toBeLessThan(400); expect(dimensions.height).toBeLessThan(400)
     expect((await context.agent.get(`/api/v1/books/${book.id}/pdf/page-image?page=2&crop=0,0,-1,1`)).status).toBe(400)
@@ -40,6 +45,24 @@ describe('document fidelity and delivery', () => {
     expect(suffix.status).toBe(206); expect(suffix.headers['content-range']).toBe(`bytes ${bytes.length - 20}-${bytes.length - 1}/${bytes.length}`)
     expect((await context.agent.get(url).set('Range', `bytes=${bytes.length}-`)).status).toBe(416)
     expect((await context.agent.get(url).set('Range', 'bytes=0-1,4-5')).status).toBe(200)
+  })
+  it('reuses prepared assets across reads and invalidates changed source files', async () => {
+    const file = path.join(context.books, 'prepared.pdf')
+    await writeFidelityPdf(file)
+    const original = await fs.readFile(file)
+    await preparePdf(file, context.config.dataDir)
+    const directory = await preparedPdfDirectory(file, context.config.dataDir)
+    const page = await readPreparedPdfPage(file, context.config.dataDir, 2)
+    const asset = path.join(directory, page.figures[0].asset)
+    const first = await fs.stat(asset)
+    await preparePdf(file, context.config.dataDir)
+    expect((await fs.stat(asset)).mtimeMs).toBe(first.mtimeMs)
+    expect(await fs.readFile(file)).toEqual(original)
+    expect((await readPreparedPdfPage(file, context.config.dataDir, 999)).page).toBe(3)
+    await fs.appendFile(file, '\n% changed source\n')
+    expect(await preparedPdfDirectory(file, context.config.dataDir)).not.toBe(directory)
+    await preparePdf(file, context.config.dataDir)
+    expect((await readPreparedPdfPage(file, context.config.dataDir, 2)).cached).toBe(true)
   })
   it('keeps diagrams composed of separate thin strokes', async () => {
     await writeFidelityPdf(path.join(context.books, 'lines.pdf'), 0, true)

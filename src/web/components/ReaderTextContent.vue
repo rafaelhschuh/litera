@@ -1,33 +1,33 @@
 <script setup lang="ts">
-import type { CSSProperties } from 'vue'
+import { computed, type CSSProperties } from 'vue'
 import type { PdfReflowBlock, PdfReflowFigure } from '../../shared/pdf-reflow'
 
-defineProps<{
+const props = defineProps<{
   blocks: PdfReflowBlock[]
   loading: boolean
   theme: 'light' | 'sepia' | 'dark'
   contentStyle: CSSProperties
-  visualSrc?: string
   figures: PdfReflowFigure[]
   imageUrl: string
 }>()
+const fontAssets = computed(() => [...new Set(props.blocks.flatMap(block => block.spans.map(span => span.fontAsset).filter((asset): asset is string => Boolean(asset))))])
+function fontFamily(asset?: string) { return asset ? `litera-pdf-${asset.replace(/[^a-zA-Z0-9-]/g, '-')}` : undefined }
+const fontRules = computed(() => fontAssets.value.map(asset => `@font-face{font-family:${JSON.stringify(fontFamily(asset))};src:url(${JSON.stringify(props.imageUrl + '&asset=' + encodeURIComponent(asset))}) format("truetype");font-display:swap;}`).join('\n'))
 </script>
 
 <template>
   <article :aria-busy="loading" class="reader-text-surface" :class="`reader-text-surface--${theme}`">
+    <component :is="'style'" v-if="fontRules">{{ fontRules }}</component>
     <div class="reader-document" :style="contentStyle">
       <p v-if="loading" class="reader-text-status">Preparando esta página…</p>
-      <figure v-for="(figure, index) in figures.filter(item => item.afterBlock === -1)" :key="`leading-${index}`" class="reader-document__visual"><img :src="`${imageUrl}&crop=${figure.crop.join(',')}`" alt="Ilustração da página" /></figure>
+      <figure v-for="(figure, index) in figures.filter(item => item.asset && item.afterBlock === -1)" :key="`leading-${index}`" class="reader-document__visual"><img :src="`${imageUrl}&asset=${encodeURIComponent(figure.asset ?? '')}`" :width="figure.width" :height="figure.height" alt="Ilustração da página" /></figure>
       <template v-for="(block, index) in blocks" :key="index">
         <component :is="block.kind" :data-reflow-block="index" :class="{ 'reader-document__center': block.align === 'center', 'reader-document__section': block.spaced }">
-          <span v-for="(span, spanIndex) in block.spans" :key="spanIndex" :class="{ 'reader-document__bold': span.bold, 'reader-document__italic': span.italic }">{{ span.text }}</span>
+          <span v-for="(span, spanIndex) in block.spans" :key="spanIndex" :style="span.fontAsset ? { fontFamily: fontFamily(span.fontAsset) } : undefined" :class="{ 'reader-document__bold': span.bold, 'reader-document__italic': span.italic }">{{ span.text }}</span>
         </component>
-        <figure v-for="(figure, figureIndex) in figures.filter(item => item.afterBlock === index)" :key="figureIndex" class="reader-document__visual"><img :src="`${imageUrl}&crop=${figure.crop.join(',')}`" alt="Ilustração da página" /></figure>
+        <figure v-for="(figure, figureIndex) in figures.filter(item => item.asset && item.afterBlock === index)" :key="figureIndex" class="reader-document__visual"><img :src="`${imageUrl}&asset=${encodeURIComponent(figure.asset ?? '')}`" :width="figure.width" :height="figure.height" alt="Ilustração da página" /></figure>
       </template>
-      <p v-if="!loading && !blocks.length" class="reader-text-status">{{ visualSrc ? 'Esta página não possui texto extraível; o conteúdo visual foi preservado.' : 'Esta página não tem conteúdo legível.' }}</p>
-      <figure v-if="visualSrc" class="reader-document__visual" aria-label="Conteúdo visual preservado desta página">
-        <img :src="visualSrc" alt="Conteúdo visual preservado desta página" />
-      </figure>
+      <p v-if="!loading && !blocks.length && !figures.length" class="reader-text-status">Esta página não possui texto extraível. Abra o documento original para consultar o conteúdo.</p>
     </div>
   </article>
 </template>

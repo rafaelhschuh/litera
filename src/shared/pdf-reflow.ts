@@ -1,4 +1,4 @@
-export type PdfReflowSpan = { text: string; bold: boolean; italic: boolean }
+export type PdfReflowSpan = { text: string; bold: boolean; italic: boolean; fontAsset?: string }
 export type PdfReflowBlock = {
   kind: 'h1' | 'h2' | 'p'
   align: 'left' | 'center'
@@ -6,7 +6,7 @@ export type PdfReflowBlock = {
   spans: PdfReflowSpan[]
   sourceY?: number
 }
-export type PdfReflowFigure = { afterBlock: number; crop: [number, number, number, number] }
+export type PdfReflowFigure = { afterBlock: number; asset?: string; width?: number; height?: number; crop: [number, number, number, number] }
 export type PdfTextItem = {
   str?: string
   fontName?: string
