@@ -4,9 +4,10 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { createCanvas } from '@napi-rs/canvas'
 import express, { type NextFunction, type Request, type Response } from 'express'
-import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { z } from 'zod'
-import { assessPdfAdaptation, structurePdfText, type PdfReflowBlock } from '../shared/pdf-reflow.js'
+import { assessPdfAdaptation, structurePdfText, type PdfReflowBlock, type PdfReflowFigure } from '../shared/pdf-reflow.js'
+import { pdfFigures, pdfGraphicsOperations } from './pdf-figures.js'
 import type { ReadingLocator } from '../shared/progress.js'
 import { normalizeProgress } from '../shared/progress.js'
 import { createSession, deleteSession, parseCookies, requireAdmin, requireUser, sessionMiddleware, type SessionUser } from './auth.js'
@@ -20,7 +21,8 @@ import { configuredMetadataProvider } from './metadata.js'
 
 const projectRoot = process.cwd()
 const pdfStandardFontDataUrl = `${path.join(path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'standard_fonts')}${path.sep}`
-const pdfReflowCache = new Map<string, { pageCount: number; blocks: PdfReflowBlock[]; adaptation: ReturnType<typeof assessPdfAdaptation> }>()
+const pdfCMapUrl = pdfStandardFontDataUrl.replace(/standard_fonts[/\\]$/, 'cmaps/')
+const pdfReflowCache = new Map<string, { pageCount: number; blocks: PdfReflowBlock[]; figures: PdfReflowFigure[]; adaptation: ReturnType<typeof assessPdfAdaptation> }>()
 
 const loginSchema = z.object({ username: z.string().trim().min(1).max(100), password: z.string().min(1).max(1024) })
 const librarySchema = z.object({ name: z.string().trim().min(1).max(120), path: z.string().trim().min(1).max(4096), rescanIntervalMinutes: z.number().int().min(0).max(10_080).default(0) })
@@ -255,7 +257,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       const cacheKey = `${file.filePath}:${stat.mtimeMs}:${pageNumber}`
       const cached = pdfReflowCache.get(cacheKey)
       if (cached) { res.json({ page: pageNumber, ...cached, cached: true }); return }
-      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false, standardFontDataUrl: pdfStandardFontDataUrl })
+      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false, standardFontDataUrl: pdfStandardFontDataUrl, cMapUrl: pdfCMapUrl, cMapPacked: true })
       const document = await task.promise
       try {
         const safePage = Math.min(document.numPages, pageNumber)
@@ -272,9 +274,10 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
           } catch { /* a missing embedded font still has usable size information */ }
         }
         const blocks = structurePdfText(content.items as any[], styles, viewport.width, viewport.height)
-        const graphics = new Set(Object.entries(OPS).filter(([name]) => /paint|shadingFill|constructPath/i.test(name)).map(([, value]) => value))
-        const adaptation = assessPdfAdaptation(content.items as any[], blocks, operators.fnArray.some(op => graphics.has(op)))
-        const value = { pageCount: document.numPages, blocks, adaptation }
+        const hasGraphics = operators.fnArray.some(op => pdfGraphicsOperations.has(op))
+        const adaptation = assessPdfAdaptation(content.items as any[], blocks, hasGraphics)
+        const figures = hasGraphics && blocks.length ? await pdfFigures(page, blocks) : []
+        const value = { pageCount: document.numPages, blocks, figures, adaptation }
         pdfReflowCache.set(cacheKey, value)
         if (pdfReflowCache.size > 500) pdfReflowCache.delete(pdfReflowCache.keys().next().value!)
         res.json({ page: safePage, ...value, cached: false })
@@ -289,11 +292,14 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       const pageParam = Number(req.query.page)
       const requestedPage = Number.isFinite(pageParam) ? Math.max(1, Math.floor(pageParam)) : 1
       const stat = fs.statSync(file.filePath)
-      const etag = `W/"${stat.size}-${Math.round(stat.mtimeMs)}-${requestedPage}"`
+      const crop = req.query.crop === undefined ? undefined : z.string().transform(value => value.split(',').map(Number)).pipe(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1), z.number().positive().max(1), z.number().positive().max(1)])).safeParse(req.query.crop)
+      if (crop && (!crop.success || crop.data[0] + crop.data[2] > 1.001 || crop.data[1] + crop.data[3] > 1.001)) { apiError(res, 400, 'INVALID_CROP', 'Invalid page region'); return }
+      const region = crop?.success ? crop.data : undefined
+      const etag = `W/"${stat.size}-${Math.round(stat.mtimeMs)}-${requestedPage}-${region?.join(',') ?? 'full'}"`
       res.setHeader('Cache-Control', 'private, no-cache')
       res.setHeader('ETag', etag)
       if (req.headers['if-none-match'] === etag) { res.status(304).end(); return }
-      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false, standardFontDataUrl: pdfStandardFontDataUrl })
+      const task = getDocument({ data: new Uint8Array(await fs.promises.readFile(file.filePath)), useSystemFonts: false, standardFontDataUrl: pdfStandardFontDataUrl, cMapUrl: pdfCMapUrl, cMapPacked: true })
       const document = await task.promise
       try {
         const pageNumber = Math.min(document.numPages, requestedPage)
@@ -306,7 +312,14 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
         await page.render({ canvas: canvas as any, canvasContext: canvasContext as any, viewport, background: '#ffffff' }).promise
         page.cleanup()
         res.type('png').setHeader('Content-Disposition', `inline; filename="page-${pageNumber}.png"`)
-        res.send(canvas.toBuffer('image/png'))
+        if (region) {
+          const x = Math.floor(region[0] * canvas.width), y = Math.floor(region[1] * canvas.height)
+          const width = Math.max(1, Math.min(canvas.width - x, Math.ceil(region[2] * canvas.width)))
+          const height = Math.max(1, Math.min(canvas.height - y, Math.ceil(region[3] * canvas.height)))
+          const cropped = createCanvas(width, height)
+          cropped.getContext('2d').drawImage(canvas, x, y, width, height, 0, 0, width, height)
+          res.send(cropped.toBuffer('image/png'))
+        } else res.send(canvas.toBuffer('image/png'))
       } finally { await task.destroy() }
     } catch (error) { next(error) }
   })

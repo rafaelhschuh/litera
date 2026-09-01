@@ -19,7 +19,7 @@ export async function writePdf(filePath: string, title = 'Caderno PDF', author =
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
     '<< /Length 49 >>\nstream\nBT /F1 18 Tf 72 720 Td (Litera PDF real) Tj ET\nendstream',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
     `<< /Title (${title}) /Author (${author}) >>`,
   ]
   let pdf = '%PDF-1.4\n'; const offsets = [0]
@@ -31,24 +31,27 @@ export async function writePdf(filePath: string, title = 'Caderno PDF', author =
   await fs.writeFile(filePath, pdf)
 }
 
-export async function writeFidelityPdf(filePath: string, paddingBytes = 0): Promise<void> {
+export async function writeFidelityPdf(filePath: string, paddingBytes = 0, lineDiagram = false): Promise<void> {
   const text = [
     'BT /F1 12 Tf 40 775 Td (INICIO: paragrafo antes da nota.) Tj ET',
+    'BT /F1 12 Tf 40 755 Td <' + Buffer.from('A mãe aprendeu: atenção, ação e coração.', 'latin1').toString('hex') + '> Tj ET',
     ...Array.from({ length: 35 }, (_, index) => `BT /F1 12 Tf 40 ${740 - index * 18} Td (Paragrafo ${index}: conteudo integral para leitura adaptada.) Tj ET`),
     'BT /F1 12 Tf 40 390 Td (MEIO: toma nota disto.) Tj ET',
     'BT /F1 12 Tf 40 20 Td (FINAL: capacidade de continuar o paragrafo completo.) Tj ET',
   ].sort((a, b) => Number(b.match(/40 (\d+) Td/)?.[1]) - Number(a.match(/40 (\d+) Td/)?.[1])).join('\n')
-  const graphic = 'q 180 0 0 180 80 300 cm /Im1 Do Q\nBT /F1 18 Tf 40 700 Td (Pagina com imagem preservada) Tj ET'
+  const graphic = (lineDiagram ? 'q 0.5 w 80 300 m 260 300 l S 260 300 m 260 480 l S 260 480 m 80 480 l S 80 480 m 80 300 l S Q' : 'q 180 0 0 180 80 300 cm /Im1 Do Q') + '\nBT /F1 18 Tf 40 700 Td (Pagina com imagem preservada) Tj ET'
   const stream = (value: string) => `<< /Length ${Buffer.byteLength(value)} >>\nstream\n${value}\nendstream`
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>',
+    '<< /Type /Pages /Kids [3 0 R 6 0 R 10 0 R] /Count 3 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-    stream(text), '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    stream(text), '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 8 0 R >> >> /Contents 7 0 R >>',
     stream(graphic),
     '<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length 7 >>\nstream\nC27B90>\nendstream',
     '<< /Title (Fidelidade PDF) >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 11 0 R >>',
+    stream(text),
   ]
   if (paddingBytes) objects.push(stream('0'.repeat(paddingBytes)))
   let result = '%PDF-1.4\n'; const offsets = [0]

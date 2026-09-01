@@ -1,5 +1,13 @@
 # Changelog
 
+## Não publicado — correções após 0.4.1
+
+- Texto adaptado reconstrói palavras, acentos, ligaturas, parágrafos e colunas sem descartar bordas da página. CMaps locais são fornecidos ao extrator.
+- Navegação percorre o conteúdo vertical antes de trocar a página física e restaura posição dentro de texto ou ilustração. Falha de carregamento preserva página e progresso anteriores.
+- Ilustrações e diagramas recebem recortes próprios no fluxo; páginas textuais deixam de anexar um print integral ao final.
+- Limpeza de destaques preserva as âncoras do Vue, evitando conteúdo residual e imagens ausentes após troca de página.
+- Regressões cobrem extração, diagramas de linhas finas, leitura até o fim, restauração e erro de carregamento.
+
 ## 0.4.1 — 2026-09-01
 
 - PDF em modo adaptado permanece no reflow em páginas complexas em vez de trocar silenciosamente para o documento original.

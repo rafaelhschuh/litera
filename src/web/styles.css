@@ -148,3 +148,6 @@ textarea{width:100%;padding:var(--space-3) var(--space-4);color:var(--text-prima
 .rating-stars button.rating-stars__active{color:var(--warning)}
 
 .reader-initial-loading{position:absolute;inset:0;z-index:2;border-radius:0}
+
+/* Adapted PDF grows vertically; a screen advance must never skip a column. */
+.reader-stage--reflow .reader-document{column-count:1;column-width:auto;overflow-wrap:anywhere}
