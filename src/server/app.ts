@@ -122,7 +122,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.4.2', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.4.3', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -604,7 +604,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.4.2', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.4.3', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

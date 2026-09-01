@@ -1,6 +1,6 @@
 # Changelog
 
-## Não lançado
+## 0.4.3 — 2026-09-01
 
 - Descoberta prepara texto, imagens isoladas e fontes necessárias em cache persistente; bibliotecas existentes são preparadas em segundo plano ao iniciar.
 - Leitor adaptado abre sem baixar o PDF original; imagens são servidas prontas, sem renderização durante a leitura.
