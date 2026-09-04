@@ -29,6 +29,8 @@ defineProps<{ name: string; size?: number }>()
     <template v-else-if="name === 'book-open'"><path d="M2 4h6a4 4 0 0 1 4 4v12a4 4 0 0 0-4-4H2zM22 4h-6a4 4 0 0 0-4 4v12a4 4 0 0 1 4-4h6z" /></template>
     <template v-else-if="name === 'type'"><path d="M4 7V4h16v3M9 20h6M12 4v16" /></template>
     <template v-else-if="name === 'bookmark'"><path d="M6 3h12v18l-6-4-6 4z" /></template>
+    <template v-else-if="name === 'download'"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></template>
+    <template v-else-if="name === 'check'"><path d="m5 12 4 4L19 6" /></template>
     <template v-else-if="name === 'zoom-in'"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4M11 8v6M8 11h6" /></template>
     <template v-else-if="name === 'zoom-out'"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4M8 11h6" /></template>
     <template v-else-if="name === 'refresh'"><path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5" /></template>

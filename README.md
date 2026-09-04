@@ -2,7 +2,7 @@
 
 Litera Beta é uma biblioteca digital self-hosted para EPUB e PDF, com múltiplos acervos, jobs de scan, catálogo, metadata resiliente, reader integrado, progresso concorrente por usuário, painel administrativo e um cliente conservador em `/legacy`.
 
-**Versão atual:** `0.4.3` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.4.3`
+**Versão atual:** `0.5.0` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.5.0`
 
 ## Ambiente local com Docker Compose
 
@@ -45,7 +45,7 @@ docker compose down
 
 ## Produção com Docker Compose
 
-O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.4.3`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
+O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.5.0`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
 
 1. crie a pasta `books` ao lado do Compose e copie para ela os arquivos `.epub` e `.pdf`;
 2. troque `CHANGE_ME_BEFORE_DEPLOY` por uma senha inédita de pelo menos 12 caracteres;
@@ -73,7 +73,7 @@ docker compose -f docker-compose.production.yml pull
 docker compose -f docker-compose.production.yml up -d
 ```
 
-O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.4.3` para evitar upgrades implícitos.
+O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.5.0` para evitar upgrades implícitos.
 
 As capas extraídas, enviadas manualmente ou geradas a partir da primeira página de um PDF são armazenadas como JPEG progressivo de até 640 × 960 pixels. O catálogo carrega somente esse derivado e nunca abre o PDF para montar a capa no navegador. Um rescan preenche automaticamente capas ausentes de PDFs já catalogados, mesmo quando o arquivo fonte não mudou. Capas persistidas por versões anteriores são convertidas no primeiro acesso, sem alterar o EPUB/PDF fonte.
 
@@ -83,9 +83,19 @@ Entre como admin e acesse **Administração → Compatibilidade**. Ao ativar o s
 
 ## Aplicativo e leitura offline
 
-O cliente moderno pode ser instalado como PWA pela tela **Preferências**. Depois de abrir a página de um livro, use **Salvar para ler offline** para preparar o reader e guardar o conteúdo somente dentro do Litera naquele dispositivo; nenhum `.epub` ou `.pdf` é enviado à pasta de downloads. O cache é separado por conta, pode ser removido na mesma ação e é apagado no logout. Assets e telas já visitados também permanecem disponíveis quando o navegador oferece Service Worker e Cache Storage.
+O cliente moderno funciona como PWA em uma origem segura (**HTTPS**, ou localhost em desenvolvimento). No Chrome, use **Preferências → Aplicativo** ou o menu de instalação. No Safari do iPhone/iPad, use **Compartilhar → Adicionar à Tela de Início**; no Mac, **Adicionar ao Dock**, quando disponível. Instalar o aplicativo não baixa automaticamente sua biblioteca.
 
-Leitura offline é um aprimoramento do cliente moderno. O `/legacy` continua online para preservar compatibilidade. Mudanças de progresso feitas sem rede entram em uma fila local por conta/livro e são reenviadas quando a conexão volta. Consulte [`ADR-0006`](docs/decisions/ADR-0006-device-scoped-offline-reading.md) para limites de segurança, revogação e armazenamento.
+Abra a página de um livro, escolha **Salvar para offline** e espere **Disponível offline** antes de desligar a conexão. O download inclui capa, metadados e conteúdo completo de leitura. EPUBs preservam capítulos, imagens, estilos editoriais sanitizados e fontes internas; tema e tamanho podem mudar sem rede. PDFs incluem o original e todas as páginas, imagens e fontes do modo Adaptado. O conteúdo fica dentro do Litera, não na pasta de downloads.
+
+O shell de produção é preparado independentemente das páginas visitadas. Sem rede, Home, Biblioteca, busca, detalhe e reader usam os livros completos deste dispositivo; rotas profundas suportam reload. Progresso usa locators por formato. Destaques, favoritos e alterações de leitura são persistidos localmente e entram em uma fila por conta, reenviada quando o app recupera acesso ao servidor, inclusive a partir da biblioteca. Conflitos de progresso preservam o servidor e pedem uma escolha explícita, sem usar “maior percentual vence”.
+
+**Preferências → Offline** mostra livros, bytes conhecidos e estimativa do navegador quando disponível. **Remover download** libera o conteúdo sem apagar progresso, destaques ou favoritos. Quando o arquivo muda no acervo, a página oferece **Atualizar download**; a cópia anterior só é substituída após concluir a nova. Cancelar/falhar nunca confirma um pacote parcial.
+
+Logout oculta imediatamente a conta, repete a limpeza local até concluí-la e impede restauração automática mesmo quando feito sem rede; operações ainda não enviadas são descartadas no logout. Sincronize antes de sair se quiser preservá-las no servidor. O navegador pode remover dados por falta de espaço ou limpeza manual; solicitar persistência não garante retenção. Contas não compartilham downloads e a identidade local não contém senha/token, mas armazenamento do browser não é DRM. Revogações remotas só alcançam um dispositivo quando ele volta a se conectar.
+
+Uma sessão expirada exige novo login, sem apagar automaticamente a fila pendente. Autentique a mesma conta para retomar a sincronização; outra conta não recebe acesso a esses dados.
+
+O `/legacy` continua online. Administração exige conexão. Pacotes antigos da 0.4 devem ser salvos novamente para receber o conjunto completo da 0.5. Consulte [`ADR-0009`](docs/decisions/ADR-0009-offline-packages-and-outbox.md) e o [checklist de validação offline](docs/development/offline-validation.md). Testes Playwright Chromium/WebKit não substituem validação física em Safari/PWA.
 
 ## Metadata opcional
 

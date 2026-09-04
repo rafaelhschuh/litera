@@ -148,8 +148,13 @@ test('PDF: direct adapted opening, readable paragraphs, restore and extracted il
   await expect.poll(async () => page.locator('.reader-shell').evaluate(el => Math.round(el.getBoundingClientRect().height))).toBe(390)
   await expect(page.getByAltText('Ilustração da página')).toBeVisible()
   await expect(stage).toHaveAttribute('aria-busy', 'false')
-  await stage.evaluate(el => { const image = el.querySelector('img')!; el.scrollTop += image.getBoundingClientRect().top - el.getBoundingClientRect().top + image.height * .25 })
-  await expect.poll(async () => (await (await page.request.get('/api/v1/books/' + id + '/progress')).json()).progress.locator).toMatchObject({ page: 2, blockIndex: 1 })
+  const figureBlock = await stage.evaluate(el => {
+    const image = el.querySelector('img')!, figure = image.closest('.reader-document__visual')!
+    const anchors = [...el.querySelectorAll('[data-reflow-block], .reader-document__visual')]
+    el.scrollTop += image.getBoundingClientRect().top - el.getBoundingClientRect().top + image.height * .25
+    return anchors.indexOf(figure)
+  })
+  await expect.poll(async () => (await (await page.request.get('/api/v1/books/' + id + '/progress')).json()).progress.locator).toMatchObject({ page: 2, blockIndex: figureBlock })
   await expect.poll(async () => (await (await page.request.get('/api/v1/books/' + id + '/progress')).json()).progress.locator.offset).toBeCloseTo(.25, 2)
   const figureScroll = await scroll()
   await page.reload()

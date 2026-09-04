@@ -197,6 +197,17 @@ export const migrations = [
     PRIMARY KEY(user_id, book_id)
   );
   `,
+  `
+  CREATE TABLE sync_operations (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    operation_id TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    response_status INTEGER NOT NULL,
+    response_body TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(user_id, operation_id)
+  );
+  `,
 ]
 
 export type LiteraDatabase = Database.Database

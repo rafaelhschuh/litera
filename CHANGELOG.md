@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — 2026-09-04
+
+- PWA instalável com app shell versionado, rotas essenciais em reload/cold start offline e atualização aplicada somente após consentimento, sem apagar conteúdo privado.
+- Downloads explícitos e atômicos de EPUB/PDF em IndexedDB, com progresso real, cancelamento, quota, revisão do arquivo, atualização segura e gerenciamento por livro.
+- EPUB preserva capítulos, índice, imagens, CSS e fontes; PDF oferece documento original por `ArrayBuffer` e páginas adaptadas, figuras e fontes sem depender de Range offline.
+- Home, biblioteca, busca, capas, detalhes e preferências usam catálogo local e apresentam estados online/offline claros; áreas administrativas exigem conexão.
+- Progresso, destaques, favoritos e preferências são persistidos imediatamente em uma outbox por usuário, com idempotência, leases, backoff e conflitos por revisão.
+- Sessões expiradas ocultam dados sem destruir a fila; logout explícito remove downloads e estado local da conta com retry seguro de limpeza.
+- Regressões cobrem Chromium desktop/mobile, cold start e atualização do PWA, além de IndexedDB/outbox em Playwright WebKit. Checklists para iPhone/iPad/macOS e Android permanecem como validação física pós-release.
+
 ## 0.4.3 — 2026-09-01
 
 - Descoberta prepara texto, imagens isoladas e fontes necessárias em cache persistente; bibliotecas existentes são preparadas em segundo plano ao iniciar.

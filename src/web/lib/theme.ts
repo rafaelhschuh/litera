@@ -19,7 +19,8 @@ export function applyTheme(theme: AppTheme): void {
 
 export function initializeTheme(): void {
   media = window.matchMedia('(prefers-color-scheme: dark)')
-  const cached = window.localStorage.getItem('litera-theme')
+  let cached: string | null = null
+  try { cached = window.localStorage.getItem('litera-theme') } catch { /* Storage is optional for online reading. */ }
   applyTheme(cached === 'light' || cached === 'dark' || cached === 'system' ? cached : 'system')
   media.addEventListener?.('change', () => {
     if (appTheme.value === 'system') applyTheme('system')
@@ -27,6 +28,6 @@ export function initializeTheme(): void {
 }
 
 export function rememberTheme(theme: AppTheme): void {
-  window.localStorage.setItem('litera-theme', theme)
+  try { window.localStorage.setItem('litera-theme', theme) } catch { /* Keep the current visual choice in memory. */ }
   applyTheme(theme)
 }

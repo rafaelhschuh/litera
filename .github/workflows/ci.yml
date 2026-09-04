@@ -20,12 +20,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Install browser engines
+        run: npx playwright install --with-deps chromium webkit
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: Install browser engines
-        run: npx playwright install --with-deps chromium webkit
+      - name: Offline storage and sync — WebKit
+        run: LITERA_STORAGE_BROWSER=webkit npm test -- tests/offline-store.test.ts tests/offline-sync.test.ts
       - name: Reader E2E — Chromium and WebKit
         run: npm run test:e2e
       - uses: docker/setup-buildx-action@v3

@@ -151,3 +151,10 @@ textarea{width:100%;padding:var(--space-3) var(--space-4);color:var(--text-prima
 
 /* Adapted PDF grows vertically; a screen advance must never skip a column. */
 .reader-stage--reflow .reader-document{column-count:1;column-width:auto;overflow-wrap:anywhere}
+
+.offline-status{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-3);color:var(--text-secondary);font-size:var(--text-sm)}
+.offline-status:not(:empty){margin-bottom:var(--space-4)}
+.offline-storage-list{list-style:none;padding:0;margin:var(--space-4) 0}
+.offline-storage-list li{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);padding:var(--space-3) 0;border-bottom:1px solid var(--border)}
+.offline-storage-list p{margin:var(--space-1) 0 0}
+.offline-book-control progress{display:block;width:100%;accent-color:var(--accent);margin-block:var(--space-2)}

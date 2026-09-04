@@ -24,7 +24,7 @@ const pdfCMapUrl = pdfStandardFontDataUrl.replace(/standard_fonts[/\\]$/, 'cmaps
 
 const loginSchema = z.object({ username: z.string().trim().min(1).max(100), password: z.string().min(1).max(1024) })
 const librarySchema = z.object({ name: z.string().trim().min(1).max(120), path: z.string().trim().min(1).max(4096), rescanIntervalMinutes: z.number().int().min(0).max(10_080).default(0) })
-const progressSchema = z.object({ format: z.enum(['epub', 'pdf']), progressRatio: z.number(), locator: z.record(z.string(), z.unknown()), completed: z.boolean().optional(), revision: z.number().int().positive().optional() })
+const progressSchema = z.object({ format: z.enum(['epub', 'pdf']), progressRatio: z.number(), locator: z.record(z.string(), z.unknown()), completed: z.boolean().optional(), revision: z.number().int().nonnegative().optional() })
 const userSchema = z.object({ username: z.string().trim().min(1).max(100), displayName: z.string().trim().min(1).max(120), password: z.string().min(12).max(1024), role: z.enum(['admin', 'reader']).default('reader'), libraryIds: z.array(z.number().int().positive()).default([]) })
 const userUpdateSchema = z.object({ displayName: z.string().trim().min(1).max(120).optional(), role: z.enum(['admin', 'reader']).optional(), active: z.boolean().optional(), password: z.string().min(12).max(1024).optional(), libraryIds: z.array(z.number().int().positive()).optional() })
 const preferenceSchema = z.object({ theme: z.enum(['light', 'sepia', 'dark']), fontScale: z.number().int().min(80).max(140), lineHeight: z.enum(['compact', 'normal', 'relaxed']), margins: z.enum(['narrow', 'normal', 'wide']), appTheme: z.enum(['system', 'light', 'dark']), reducedMotion: z.boolean(), pdfInvert: z.boolean().default(false) })
@@ -44,7 +44,7 @@ function safeJson(value: string | null): unknown {
 
 function bookSelect(): string {
   return `SELECT b.id, b.title, b.author, b.description, b.language, b.identifier, b.format, b.page_count AS pageCount, b.genres, b.published_year AS publishedYear,
-    b.added_at AS addedAt, MAX(f.size) AS fileSize, CASE WHEN b.cover_path IS NULL THEN 0 ELSE 1 END AS hasCover,
+    b.added_at AS addedAt, MIN(f.id) AS selectedFileId, f.size AS fileSize, f.identity AS fileIdentity, f.modified_ms AS fileModifiedMs, CASE WHEN b.cover_path IS NULL THEN 0 ELSE 1 END AS hasCover,
     b.series, b.series_index AS seriesIndex, b.metadata_status AS metadataStatus, b.metadata_error AS metadataError,
     p.progress_ratio AS progressRatio, p.locator_payload AS locatorPayload, p.last_read_at AS lastReadAt, p.completed, br.rating AS userRating,
     CASE WHEN fav.book_id IS NULL THEN 0 ELSE 1 END AS favorite
@@ -58,13 +58,16 @@ function bookSelect(): string {
 function bookParams(req: Request): Array<string | number> { return [req.user!.role, req.user!.id, req.user!.id, req.user!.id, req.user!.id] }
 
 function mapBook(row: any): any {
-  return { ...row, genres: safeJson(row.genres) ?? [], hasCover: Boolean(row.hasCover), favorite: Boolean(row.favorite), completed: Boolean(row.completed), progressRatio: row.progressRatio ?? null, locator: safeJson(row.locatorPayload), locatorPayload: undefined }
+  const { fileIdentity, fileModifiedMs, ...book } = row
+  delete book.selectedFileId
+  const fileRevision = createHash('sha256').update(JSON.stringify([fileIdentity, row.fileSize, fileModifiedMs])).digest('hex')
+  return { ...book, fileRevision, genres: safeJson(row.genres) ?? [], hasCover: Boolean(row.hasCover), favorite: Boolean(row.favorite), completed: Boolean(row.completed), progressRatio: row.progressRatio ?? null, locator: safeJson(row.locatorPayload), locatorPayload: undefined }
 }
 
 function locateBookFile(db: LiteraDatabase, bookId: number, user: SessionUser): { filePath: string; format: 'epub' | 'pdf' } | undefined {
   const row = db.prepare(`SELECT l.path AS libraryPath, f.relative_path AS relativePath, b.format
     FROM books b JOIN book_files f ON f.book_id=b.id AND f.status='available' JOIN libraries l ON l.id=f.library_id
-    WHERE b.id=? AND (?='admin' OR EXISTS (SELECT 1 FROM user_libraries ul WHERE ul.library_id=f.library_id AND ul.user_id=?)) LIMIT 1`).get(bookId, user.role, user.id) as any
+    WHERE b.id=? AND (?='admin' OR EXISTS (SELECT 1 FROM user_libraries ul WHERE ul.library_id=f.library_id AND ul.user_id=?)) ORDER BY f.id LIMIT 1`).get(bookId, user.role, user.id) as any
   if (!row) return undefined
   const filePath = path.resolve(row.libraryPath, row.relativePath)
   const relative = path.relative(path.resolve(row.libraryPath), filePath)
@@ -108,11 +111,51 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Referrer-Policy', 'same-origin')
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' blob:; img-src 'self' blob: data:; font-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
     next()
   })
   app.use(express.json({ limit: '12mb' }))
   app.use(sessionMiddleware(db))
+  // Optional only for old clients. Every modern mutation binds its expected account
+  // to the cookie identity, so another tab cannot replay A's outbox as B.
+  app.use((req, res, next) => {
+    if (req.headers['x-litera-user'] !== undefined) {
+      const expected = req.headers['x-litera-user']
+      if (!req.user) { apiError(res, 401, 'UNAUTHENTICATED', 'Authentication required'); return }
+      if (typeof expected !== 'string' || !/^[1-9]\d*$/.test(expected) || Number(expected) !== req.user.id) { apiError(res, 409, 'SESSION_USER_MISMATCH', 'The active account changed; sign in again before synchronizing'); return }
+    }
+    next()
+  })
+
+  type MutationResult = { status: number; body?: unknown }
+  const rejected = (status: number, code: string, message: string): MutationResult => ({ status, body: { error: { code, message } } })
+  function mutation(action: (req: Request) => MutationResult) {
+    return (req: Request, res: Response) => {
+      const operationId = req.headers['x-litera-operation']
+      if (operationId !== undefined && (typeof operationId !== 'string' || !/^[a-zA-Z0-9_-]{16,128}$/.test(operationId))) { apiError(res, 400, 'INVALID_OPERATION_ID', 'Invalid synchronization operation id'); return }
+      const bookId = req.path.match(/^\/api\/v1\/books\/(\d+)/)?.[1]
+      if (bookId && !locateBookFile(db, Number(bookId), req.user!)) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
+      const hash = createHash('sha256').update(JSON.stringify([req.method, req.path, req.body ?? null])).digest('hex')
+      const result = db.transaction((): MutationResult => {
+        if (operationId) {
+          const previous = db.prepare('SELECT request_hash,response_status,response_body FROM sync_operations WHERE user_id=? AND operation_id=?').get(req.user!.id, operationId) as { request_hash: string; response_status: number; response_body: string | null } | undefined
+          if (previous) return previous.request_hash === hash ? { status: previous.response_status, body: safeJson(previous.response_body) } : rejected(409, 'OPERATION_ID_REUSED', 'Operation id was already used for a different request')
+        }
+        const result = action(req)
+        if (operationId && result.status < 300) {
+          db.prepare('INSERT INTO sync_operations(user_id,operation_id,request_hash,response_status,response_body) VALUES (?,?,?,?,?)').run(req.user!.id, operationId, hash, result.status, result.body === undefined ? null : JSON.stringify(result.body))
+          // The client drains sequentially and never retries an acknowledged
+          // operation. Keep a generous recent replay window without allowing
+          // receipts (which may include highlight responses) to grow forever.
+          const count = (db.prepare('SELECT COUNT(*) AS count FROM sync_operations WHERE user_id=?').get(req.user!.id) as { count: number }).count
+          if (count > 2500) db.prepare('DELETE FROM sync_operations WHERE rowid IN (SELECT rowid FROM sync_operations WHERE user_id=? ORDER BY rowid LIMIT ?)').run(req.user!.id, count - 2250)
+        }
+        return result
+      })()
+      if (result.status === 204) res.status(204).end()
+      else res.status(result.status).json(result.body)
+    }
+  }
   app.use((req, res, next) => {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
       const origin = req.headers.origin
@@ -122,7 +165,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.4.3', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.5.0', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -187,7 +230,14 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   app.get('/api/v1/books/:id', requireUser, (req, res) => {
     const row = db.prepare(`${bookSelect()} WHERE b.id=? GROUP BY b.id`).get(...bookParams(req), Number(req.params.id))
     if (!row) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
-    res.json({ book: mapBook(row) })
+    const file = locateBookFile(db, Number(req.params.id), req.user!)
+    if (!file || !fs.existsSync(file.filePath)) { apiError(res, 404, 'BOOK_FILE_NOT_FOUND', 'Book file is unavailable'); return }
+    const stat = fs.statSync(file.filePath)
+    const book = mapBook(row)
+    // Live stat detects edits during a download, even before the next library scan.
+    book.fileSize = stat.size
+    book.fileRevision = createHash('sha256').update(JSON.stringify([`${stat.dev}:${stat.ino}`, stat.size, Math.round(stat.mtimeMs)])).digest('hex')
+    res.json({ book })
   })
   app.get('/api/v1/books/:id/content', requireUser, (req, res, next) => {
     const file = locateBookFile(db, Number(req.params.id), req.user!)
@@ -234,7 +284,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       const measure = ({ narrow: 42, normal: 56, wide: 72 } as Record<string, number>)[String(req.query.margins)] ?? 56
       const palette = theme === 'dark' ? { background: '#20201e', color: '#eeeeea' } : theme === 'sepia' ? { background: '#f4ead6', color: '#302a21' } : { background: '#ffffff', color: '#272520' }
       const file = locateBookFile(db, Number(req.params.id), req.user!); if (!file || file.format !== 'epub') { apiError(res, 404, 'EPUB_NOT_FOUND', 'EPUB is unavailable'); return }
-      const html = (await readEpubChapter(file.filePath, href)).replace(/(<img\b[^>]*\bsrc=["'])([^"']+)(["'])/gi, (_match, before, source, after) => `${before}/api/v1/books/${req.params.id}/epub/asset?chapter=${encodeURIComponent(href)}&src=${encodeURIComponent(source)}${after}`)
+      const html = await readEpubChapter(file.filePath, href, Number(req.params.id))
       res.type('html').send(`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;background:${palette.background};touch-action:pan-y}body{position:static;overflow-wrap:anywhere;color:${palette.color}}.reader-document{width:min(${measure}rem,100%);min-height:100%;margin:0 auto;padding:clamp(5rem,10vh,7rem) clamp(1rem,4vw,3rem) 6rem;font:${18 * scale / 100}px/${lineHeight} Georgia,serif}*,*:before,*:after{box-sizing:border-box;max-width:100%}img,svg,video,canvas{display:block;max-width:100%;height:auto;margin:auto}a{color:inherit;text-decoration:underline;text-underline-offset:.15em}@media(min-width:1100px) and (orientation:landscape){.reader-document{width:min(${measure + 24}rem,calc(100% - 4rem));column-count:2;column-width:28em;column-gap:clamp(4rem,7vw,8rem);column-rule:1px solid color-mix(in srgb,currentColor 14%,transparent)}h1,h2,h3,p,figure,blockquote{break-inside:avoid-column}}</style></head><body><main class="reader-document">${html}</main></body></html>`)
     } catch (error) { next(error) }
   })
@@ -243,7 +293,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       const chapter = typeof req.query.chapter === 'string' ? req.query.chapter : ''
       const source = typeof req.query.src === 'string' ? req.query.src : ''
       const file = locateBookFile(db, Number(req.params.id), req.user!); if (!file || file.format !== 'epub') { apiError(res, 404, 'EPUB_NOT_FOUND', 'EPUB is unavailable'); return }
-      const asset = await readEpubAsset(file.filePath, chapter, source)
+      const asset = await readEpubAsset(file.filePath, chapter, source, Number(req.params.id))
       res.setHeader('Cache-Control', 'private, max-age=86400')
       res.type(asset.contentType).send(asset.data)
     } catch (error) { next(error) }
@@ -323,21 +373,16 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const row = db.prepare('SELECT format, progress_ratio AS progressRatio, locator_type AS locatorType, locator_payload AS locatorPayload, completed, revision, last_read_at AS lastReadAt FROM reading_progress WHERE user_id=? AND book_id=?').get(req.user!.id, Number(req.params.id)) as any
     res.json({ progress: row ? { ...row, completed: Boolean(row.completed), locator: safeJson(row.locatorPayload), locatorPayload: undefined } : null })
   })
-  app.put('/api/v1/books/:id/progress', requireUser, (req, res) => {
+  app.put('/api/v1/books/:id/progress', requireUser, mutation(req => {
     const input = progressSchema.safeParse(req.body)
-    if (!input.success) { apiError(res, 400, 'INVALID_PROGRESS', 'Progress payload is invalid'); return }
-    if (!locateBookFile(db, Number(req.params.id), req.user!)) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
+    if (!input.success) return rejected(400, 'INVALID_PROGRESS', 'Progress payload is invalid')
     const book = db.prepare('SELECT id, format, page_count AS pageCount FROM books WHERE id=?').get(Number(req.params.id)) as any
-    if (!book) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
-    if (book.format !== input.data.format) { apiError(res, 400, 'FORMAT_MISMATCH', 'Progress format does not match the book'); return }
+    if (!book) return rejected(404, 'BOOK_NOT_FOUND', 'Book not found')
+    if (book.format !== input.data.format) return rejected(400, 'FORMAT_MISMATCH', 'Progress format does not match the book')
     try {
       const normalized = normalizeProgress(book.format, input.data.locator as ReadingLocator, input.data.progressRatio, book.pageCount ?? undefined)
       const current = db.prepare('SELECT revision,format,progress_ratio AS progressRatio,locator_payload AS locatorPayload,completed,last_read_at AS lastReadAt FROM reading_progress WHERE user_id=? AND book_id=?').get(req.user!.id, book.id) as any
-      if (current && input.data.revision !== undefined && input.data.revision !== current.revision) {
-        apiError(res, 409, 'STALE_PROGRESS', 'Progress changed in another tab or device')
-        res.end()
-        return
-      }
+      if (input.data.revision !== undefined && input.data.revision !== (current?.revision ?? 0)) return rejected(409, 'STALE_PROGRESS', 'Progress changed in another tab or device')
       const completed = input.data.completed ?? normalized.progressRatio >= 0.98
       db.prepare(`INSERT INTO reading_progress(user_id, book_id, format, progress_ratio, locator_type, locator_payload, completed,dismissed_from_continue)
         VALUES (?, ?, ?, ?, ?, ?, ?,0) ON CONFLICT(user_id, book_id) DO UPDATE SET progress_ratio=excluded.progress_ratio,
@@ -345,9 +390,9 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
         dismissed_from_continue=0,revision=reading_progress.revision+1, last_read_at=CURRENT_TIMESTAMP`)
         .run(req.user!.id, book.id, book.format, normalized.progressRatio, normalized.locator.type, JSON.stringify(normalized.locator), completed ? 1 : 0)
       const saved = db.prepare('SELECT revision, last_read_at AS lastReadAt FROM reading_progress WHERE user_id=? AND book_id=?').get(req.user!.id, book.id) as Record<string, unknown>
-      res.json({ progress: { ...normalized, format: book.format, completed, ...saved } })
-    } catch (error) { apiError(res, 400, 'INVALID_LOCATOR', error instanceof Error ? error.message : 'Invalid locator') }
-  })
+      return { status: 200, body: { progress: { ...normalized, format: book.format, completed, ...saved } } }
+    } catch (error) { return rejected(400, 'INVALID_LOCATOR', error instanceof Error ? error.message : 'Invalid locator') }
+  }))
   app.delete('/api/v1/books/:id/continue', requireUser, (req, res) => {
     db.prepare('UPDATE reading_progress SET dismissed_from_continue=1 WHERE user_id=? AND book_id=?').run(req.user!.id, Number(req.params.id))
     res.status(204).end()
@@ -358,43 +403,41 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     res.json({ reopened: true })
   })
 
-  app.put('/api/v1/books/:id/favorite', requireUser, (req, res) => {
-    if (!locateBookFile(db, Number(req.params.id), req.user!)) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
+  app.put('/api/v1/books/:id/favorite', requireUser, mutation(req => {
     db.prepare('INSERT OR IGNORE INTO favorites(user_id,book_id) VALUES (?,?)').run(req.user!.id, Number(req.params.id))
-    res.json({ favorite: true })
-  })
+    return { status: 200, body: { favorite: true } }
+  }))
   app.put('/api/v1/books/:id/rating', requireUser, (req, res) => {
     const input = ratingSchema.safeParse(req.body)
     if (!input.success || !locateBookFile(db, Number(req.params.id), req.user!)) { apiError(res, 400, 'INVALID_RATING', 'Rating must be between 0 and 5'); return }
     db.prepare(`INSERT INTO book_ratings(user_id,book_id,rating) VALUES (?,?,?) ON CONFLICT(user_id,book_id) DO UPDATE SET rating=excluded.rating,updated_at=CURRENT_TIMESTAMP`).run(req.user!.id, Number(req.params.id), input.data.rating)
     res.json({ rating: input.data.rating })
   })
-  app.delete('/api/v1/books/:id/favorite', requireUser, (req, res) => {
+  app.delete('/api/v1/books/:id/favorite', requireUser, mutation(req => {
     db.prepare('DELETE FROM favorites WHERE user_id=? AND book_id=?').run(req.user!.id, Number(req.params.id))
-    res.status(204).end()
-  })
+    return { status: 204 }
+  }))
   app.get('/api/v1/books/:id/highlights', requireUser, (req, res) => {
     const bookId = Number(req.params.id)
     if (!locateBookFile(db, bookId, req.user!)) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
     const rows = db.prepare(`SELECT id,quote_text AS quoteText,locator_payload AS locatorPayload,chapter,page_number AS pageNumber,rating,created_at AS createdAt,updated_at AS updatedAt FROM highlights WHERE user_id=? AND book_id=? ORDER BY created_at DESC`).all(req.user!.id, bookId) as any[]
     res.json({ highlights: rows.map(row => ({ ...row, locator: safeJson(row.locatorPayload), locatorPayload: undefined })) })
   })
-  app.post('/api/v1/books/:id/highlights', requireUser, (req, res) => {
+  app.post('/api/v1/books/:id/highlights', requireUser, mutation(req => {
     const bookId = Number(req.params.id)
     const file = locateBookFile(db, bookId, req.user!)
-    if (!file) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
+    if (!file) return rejected(404, 'BOOK_NOT_FOUND', 'Book not found')
     const input = highlightSchema.safeParse(req.body)
-    if (!input.success) { apiError(res, 400, 'INVALID_HIGHLIGHT', 'Highlight payload is invalid'); return }
-    if (file.format === 'epub' && input.data.pageNumber) { apiError(res, 400, 'INVALID_HIGHLIGHT', 'EPUB highlights do not use absolute page numbers'); return }
+    if (!input.success) return rejected(400, 'INVALID_HIGHLIGHT', 'Highlight payload is invalid')
+    if (file.format === 'epub' && input.data.pageNumber) return rejected(400, 'INVALID_HIGHLIGHT', 'EPUB highlights do not use absolute page numbers')
     const result = db.prepare(`INSERT INTO highlights(user_id,book_id,quote_text,locator_payload,chapter,page_number) VALUES (?,?,?,?,?,?)`).run(req.user!.id, bookId, input.data.quoteText, JSON.stringify(input.data.locator), input.data.chapter ?? null, input.data.pageNumber ?? null)
     const row = db.prepare(`SELECT id,quote_text AS quoteText,locator_payload AS locatorPayload,chapter,page_number AS pageNumber,rating,created_at AS createdAt,updated_at AS updatedAt FROM highlights WHERE id=?`).get(result.lastInsertRowid) as any
-    res.status(201).json({ highlight: { ...row, locator: safeJson(row.locatorPayload), locatorPayload: undefined } })
-  })
-  app.delete('/api/v1/highlights/:id', requireUser, (req, res) => {
-    const result = db.prepare('DELETE FROM highlights WHERE id=? AND user_id=?').run(Number(req.params.id), req.user!.id)
-    if (!result.changes) { apiError(res, 404, 'HIGHLIGHT_NOT_FOUND', 'Highlight not found'); return }
-    res.status(204).end()
-  })
+    return { status: 201, body: { highlight: { ...row, locator: safeJson(row.locatorPayload), locatorPayload: undefined } } }
+  }))
+  app.delete('/api/v1/highlights/:id', requireUser, mutation(req => {
+    db.prepare('DELETE FROM highlights WHERE id=? AND user_id=?').run(Number(req.params.id), req.user!.id)
+    return { status: 204 }
+  }))
   app.put('/api/v1/highlights/:id/rating', requireUser, (req, res) => {
     const input = ratingSchema.safeParse(req.body)
     if (!input.success) { apiError(res, 400, 'INVALID_RATING', 'Rating must be between 0 and 5'); return }
@@ -421,12 +464,12 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const row = db.prepare(`SELECT theme,font_scale AS fontScale,line_height AS lineHeight,margins,app_theme AS appTheme,reduced_motion AS reducedMotion,pdf_invert AS pdfInvert FROM reader_preferences WHERE user_id=?`).get(req.user!.id) as any
     res.json({ preferences: row ? { ...row, reducedMotion: Boolean(row.reducedMotion), pdfInvert: Boolean(row.pdfInvert) } : { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false } })
   })
-  app.put('/api/v1/settings', requireUser, (req, res) => {
-    const input = preferenceSchema.safeParse(req.body); if (!input.success) { apiError(res, 400, 'INVALID_PREFERENCES', 'Reading preferences are invalid'); return }
+  app.put('/api/v1/settings', requireUser, mutation(req => {
+    const input = preferenceSchema.safeParse(req.body); if (!input.success) return rejected(400, 'INVALID_PREFERENCES', 'Reading preferences are invalid')
     const value = input.data
     db.prepare(`INSERT INTO reader_preferences(user_id,theme,font_scale,line_height,margins,app_theme,reduced_motion,pdf_invert) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET theme=excluded.theme,font_scale=excluded.font_scale,line_height=excluded.line_height,margins=excluded.margins,app_theme=excluded.app_theme,reduced_motion=excluded.reduced_motion,pdf_invert=excluded.pdf_invert,updated_at=CURRENT_TIMESTAMP`).run(req.user!.id, value.theme, value.fontScale, value.lineHeight, value.margins, value.appTheme, value.reducedMotion ? 1 : 0, value.pdfInvert ? 1 : 0)
-    res.json({ preferences: value })
-  })
+    return { status: 200, body: { preferences: value } }
+  }))
   app.put('/api/v1/account/password', requireUser, (req, res) => {
     const input = z.object({ currentPassword: z.string().min(1).max(1024), newPassword: z.string().min(12).max(1024) }).safeParse(req.body)
     if (!input.success) { apiError(res, 400, 'INVALID_PASSWORD', 'The new password must contain at least 12 characters'); return }
@@ -604,7 +647,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.4.3', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.5.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {
@@ -618,6 +661,10 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   const webRoot = path.join(projectRoot, 'dist/web')
   if (fs.existsSync(webRoot)) {
     app.use(express.static(webRoot, { index: false }))
+    app.use((req, res, next) => {
+      if (req.path.startsWith('/assets/') || req.path.startsWith('/icons/') || /\.(?:js|mjs|css|map|woff2?|ttf|otf|png|jpe?g|svg|webp|ico|webmanifest)$/i.test(req.path)) { res.status(404).type('text').send('Asset not found'); return }
+      next()
+    })
     app.get(['/', '/*path'], (_req, res) => res.sendFile(path.join(webRoot, 'index.html')))
   }
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

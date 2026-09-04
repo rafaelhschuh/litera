@@ -9,7 +9,7 @@ const username = ref(''); const password = ref(''); const error = ref(''); const
 const router = useRouter(); const route = useRoute()
 async function submit() {
   error.value = ''; loading.value = true
-  try { rememberSession((await api<{ user: User }>('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) })).user); await router.push(typeof route.query.next === 'string' ? route.query.next : '/') }
+  try { await rememberSession((await api<{ user: User }>('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ username: username.value, password: password.value }) })).user); await router.push(typeof route.query.next === 'string' ? route.query.next : '/') }
   catch (reason) { error.value = reason instanceof Error ? reason.message : 'Não foi possível entrar.'; await nextTick(); document.querySelector<HTMLInputElement>('#username')?.focus() }
   finally { loading.value = false }
 }

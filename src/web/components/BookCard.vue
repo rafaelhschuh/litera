@@ -10,6 +10,7 @@ const emit=defineEmits<{remove:[id:number]}>()
     <div class="book-card__body">
       <h3><RouterLink :to="`/books/${book.id}`">{{ book.title }}</RouterLink></h3>
       <p>{{ book.author || 'Autor desconhecido' }}</p>
+      <small v-if="book.offline" class="field__hint">Disponível offline</small>
       <BookProgress v-if="book.progressRatio" :value="book.progressRatio" />
       <button v-if="removable" class="text-link book-card__remove" @click="emit('remove',book.id)">Remover da seção</button>
     </div>

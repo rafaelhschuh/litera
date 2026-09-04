@@ -3,7 +3,7 @@ import vue from 'eslint-plugin-vue'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'coverage/**', 'src/legacy/**', 'test-results/**', 'playwright-report/**'] },
+  { ignores: ['dist/**', 'coverage/**', 'src/legacy/**', 'test-results/**', 'playwright-report/**', '.codex-local/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/recommended'],

@@ -1,79 +1,103 @@
-/* global self, caches, URL, location, fetch, Response, Headers, Request */
-const SHELL_CACHE='litera-shell-v2'
-const CONTROL_CACHE='litera-control-v1'
-const SHELL=['/','/manifest.webmanifest','/icons/litera.svg']
-let activeUserId=null
+/* global self, caches, URL, fetch, Request */
+// Replaced by the Vite build plugin. Not an offline development server.
+const BUILD = '__LITERA_BUILD__'
+const PRECACHE = /* __LITERA_PRECACHE__ */ []
+const SHELL_PREFIX = 'litera-shell-build-'
+const SHELL_CACHE = SHELL_PREFIX + BUILD
+const ASSETS = new Set(PRECACHE)
+const NAVIGATION = /^\/(?:|login\/?|library\/?|search\/?|favorites\/?|settings\/?|highlights\/?|(?:books|read)\/\d+\/?|(?:authors|series|genres)(?:\/[^/]+)?\/?)$/
+let preparing
 
-const bookCache=(userId,bookId)=>`litera-books-u${userId}-b${bookId}-v1`
-const dataCache=userId=>`litera-data-u${userId}-v1`
-const marker=bookId=>`/_litera/offline/books/${bookId}`
-const activeUserMarker='/_litera/offline/active-user'
-const bookIdFrom=url=>url.pathname.match(/^\/api\/v1\/books\/(\d+)(?:\/|$)/)?.[1]
-const generalApi=url=>url.pathname==='/api/v1/home'||url.pathname==='/api/v1/settings'||url.pathname==='/api/v1/books'||url.pathname.startsWith('/api/v1/catalog/')
+function validResponse(url, response) {
+  if (!response.ok || response.redirected) return false
+  const type = response.headers.get('content-type') || ''
+  // Never mistake the server's SPA fallback for a missing static resource.
+  if (url.endsWith('.html')) return type.includes('text/html')
+  if (type.includes('text/html')) return false
+  if (/\.m?js$/.test(url)) return /(?:javascript|ecmascript)/.test(type)
+  if (url.endsWith('.css')) return type.includes('text/css')
+  if (url.endsWith('.wasm')) return type.includes('application/wasm')
+  return true
+}
 
-self.addEventListener('install',event=>event.waitUntil(caches.open(SHELL_CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())))
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('litera-shell-')&&key!==SHELL_CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())))
-self.addEventListener('message',event=>{
-  const data=event.data||{}
-  if(data.type==='LITERA_ACTIVE_USER'){
-    activeUserId=Number.isInteger(data.userId)&&data.userId>0?data.userId:null
-    event.waitUntil(caches.open(CONTROL_CACHE).then(cache=>activeUserId?cache.put(activeUserMarker,new Response(String(activeUserId))):cache.delete(activeUserMarker)))
+async function prepareShell() {
+  if (BUILD === '__LITERA_' + 'BUILD__' || !ASSETS.has('/index.html')) throw new Error('Production shell required')
+  const cache = await caches.open(SHELL_CACHE)
+  // Bound parallel requests and memory, particularly on mobile WebKit.
+  for (let index = 0; index < PRECACHE.length; index += 8) {
+    const results = await Promise.allSettled(PRECACHE.slice(index, index + 8).map(async url => {
+      if (await cache.match(url)) return
+      const response = await fetch(new Request(new URL(url, self.location.origin), { cache: 'reload', credentials: 'omit' }))
+      if (!validResponse(url, response)) throw new Error('Invalid shell resource: ' + url)
+      await cache.put(url, response)
+    }))
+    const failed = results.find(result => result.status === 'rejected')
+    if (failed) throw failed.reason
   }
-  if(data.type==='LITERA_CLEAR_USER'&&Number.isInteger(data.userId))event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith(`litera-books-u${data.userId}-`)||key===dataCache(data.userId)).map(key=>caches.delete(key)))))
+}
+
+function ensureShell() {
+  if (!preparing) preparing = prepareShell().finally(() => { preparing = undefined })
+  return preparing
+}
+
+self.addEventListener('install', event => {
+  event.waitUntil(ensureShell().catch(async error => {
+    await caches.delete(SHELL_CACHE)
+    throw error
+  }))
+  // First install activates naturally. Updates wait for consent or closed clients.
 })
 
-async function currentUser(){
-  if(activeUserId)return activeUserId
-  const saved=await caches.open(CONTROL_CACHE).then(cache=>cache.match(activeUserMarker))
-  const value=saved?Number(await saved.text()):0
-  activeUserId=Number.isInteger(value)&&value>0?value:null
-  return activeUserId
+async function cleanUnusedShells(exceptClientId, resultingClientId) {
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  if (clients.some(client => client.id !== exceptClientId && client.id !== resultingClientId)) return
+  const names = await caches.keys()
+  // A waiting/partly installed update owns a different cache; never erase it.
+  if (self.registration.waiting || self.registration.installing) return
+  await Promise.all(names.filter(name => name.startsWith('litera-shell-') && name !== SHELL_CACHE).map(name => caches.delete(name)))
 }
 
-async function partialResponse(request,response){
-  const match=request.headers.get('range')?.match(/^bytes=(\d+)-(\d*)$/)
-  if(!match)return response
-  const bytes=await response.arrayBuffer(),start=Number(match[1]),end=match[2]?Math.min(Number(match[2]),bytes.byteLength-1):bytes.byteLength-1
-  if(start>end||start>=bytes.byteLength)return new Response(null,{status:416,headers:{'Content-Range':`bytes */${bytes.byteLength}`}})
-  const headers=new Headers(response.headers);headers.set('Content-Range',`bytes ${start}-${end}/${bytes.byteLength}`);headers.set('Content-Length',String(end-start+1));headers.set('Accept-Ranges','bytes')
-  return new Response(bytes.slice(start,end+1),{status:206,statusText:'Partial Content',headers})
-}
+self.addEventListener('activate', event => {
+  // Keep previous bundles while another tab may still be reading with them.
+  event.waitUntil(cleanUnusedShells().then(() => self.clients.claim()))
+})
 
-async function authenticatedBook(request,url,bookId,userId){
-  const cache=await caches.open(bookCache(userId,bookId)),saved=await cache.match(marker(bookId))
-  if(!saved)return fetch(request)
-  try{
-    const response=await fetch(request)
-    if([401,403,404].includes(response.status)){await caches.delete(bookCache(userId,bookId));return response}
-    if(response.ok&&!request.headers.has('range'))await cache.put(request,response.clone())
-    return response
-  }catch{
-    const cached=await cache.match(new Request(url.href,{credentials:'same-origin'}))
-    if(!cached)throw new Error('Offline book resource is unavailable')
-    return partialResponse(request,cached)
+self.addEventListener('message', event => {
+  if (event.data?.type === 'LITERA_SHELL_STATUS') event.ports[0]?.postMessage({ type: 'LITERA_SHELL_STATUS', protocol: 1, build: BUILD })
+  if (event.data?.type === 'LITERA_APPLY_UPDATE') event.waitUntil(self.skipWaiting())
+  if (event.data?.type === 'LITERA_ENSURE_SHELL') {
+    event.waitUntil(ensureShell().then(
+      () => event.ports[0]?.postMessage({ type: 'LITERA_SHELL_READY', build: BUILD, ready: true }),
+      () => event.ports[0]?.postMessage({ type: 'LITERA_SHELL_READY', build: BUILD, ready: false }),
+    ))
   }
-}
+})
 
-async function authenticatedData(request,userId){
-  const cache=await caches.open(dataCache(userId))
-  try{const response=await fetch(request);if(response.ok)await cache.put(request,response.clone());return response}
-  catch{const cached=await cache.match(request);if(cached)return cached;throw new Error('Offline application data is unavailable')}
-}
-
-async function authenticatedApi(request,url){
-  const userId=await currentUser()
-  if(!userId)return fetch(request)
-  const bookId=bookIdFrom(url)
-  if(bookId)return authenticatedBook(request,url,bookId,userId)
-  if(generalApi(url))return authenticatedData(request,userId)
+async function shellAsset(request, pathname) {
+  const cached = await caches.open(SHELL_CACHE).then(cache => cache.match(pathname))
+  if (cached) return cached
+  // An open tab can still request an immutable chunk from the previous build.
+  if (pathname.startsWith('/assets/')) {
+    const names = await caches.keys()
+    for (const name of names.filter(name => name.startsWith(SHELL_PREFIX) && name !== SHELL_CACHE)) {
+      const previous = await caches.open(name).then(cache => cache.match(pathname))
+      if (previous) return previous
+    }
+  }
+  // No runtime caching: only the build allowlist can populate shell storage.
   return fetch(request)
 }
 
-self.addEventListener('fetch',event=>{
-  const request=event.request,url=new URL(request.url)
-  if(request.method!=='GET'||url.origin!==location.origin)return
-  if(url.pathname.startsWith('/api/')){
-    event.respondWith(authenticatedApi(request,url));return
+self.addEventListener('fetch', event => {
+  const request = event.request
+  const url = new URL(request.url)
+  if (request.method !== 'GET' || url.origin !== self.location.origin || request.headers.has('range')) return
+  if (/^\/(?:api(?:\/|$)|legacy(?:[-/]|$)|health(?:\/|$)|admin(?:\/|$))/.test(url.pathname)) return
+  if (request.mode === 'navigate' && NAVIGATION.test(url.pathname)) {
+    event.respondWith(caches.open(SHELL_CACHE).then(async cache => (await cache.match('/index.html')) || fetch(request)))
+    event.waitUntil(cleanUnusedShells(event.clientId, event.resultingClientId).catch(() => undefined))
+    return
   }
-  event.respondWith(fetch(request).then(response=>{const copy=response.clone();if(response.ok)caches.open(SHELL_CACHE).then(cache=>cache.put(request,copy));return response}).catch(()=>caches.match(request).then(cached=>cached||(request.mode==='navigate'?caches.match('/'):undefined))))
+  if (ASSETS.has(url.pathname) || url.pathname.startsWith('/assets/')) event.respondWith(shellAsset(request, url.pathname))
 })

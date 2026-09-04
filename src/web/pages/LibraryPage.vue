@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import AppState from '../components/AppState.vue'
 import BookGrid from '../components/BookGrid.vue'
 import { api } from '../lib/api'
+import { syncState } from '../lib/offline-sync'
 
 const props = withDefaults(defineProps<{ filterKind?: 'author' | 'series' | 'genre' | 'favorite'; filterValue?: string }>(), { filterKind: undefined, filterValue: undefined })
 const books = ref<any[]>([])
@@ -30,6 +31,7 @@ async function load(reset = false) {
 }
 function move(delta: number) { page.value = Math.min(pages.value, Math.max(1, page.value + delta)); void load() }
 watch([format, sort], () => { void load(true) })
+watch(() => syncState.online, () => { void load(true) })
 onMounted(() => load())
 </script>
 
@@ -45,7 +47,7 @@ onMounted(() => load())
     <AppState v-if="state === 'loading'" kind="loading" />
     <AppState v-else-if="state === 'error'" kind="error" title="Não foi possível carregar a biblioteca" message="Tente novamente; seu progresso não foi afetado."><button class="button button--secondary" @click="load()">Tentar novamente</button></AppState>
     <BookGrid v-else-if="books.length" :books="books" />
-    <AppState v-else kind="empty" :title="q ? 'Nenhum livro encontrado' : 'Nenhum livro nesta seção'" :message="q ? 'Revise o título ou autor pesquisado.' : 'Quando houver livros correspondentes, eles aparecerão aqui.'" />
+    <AppState v-else kind="empty" :title="q ? 'Nenhum livro encontrado' : !syncState.online ? 'Você ainda não tem livros disponíveis offline' : 'Nenhum livro nesta seção'" :message="q ? 'Revise o título ou autor pesquisado.' : !syncState.online ? 'Conecte-se e escolha Salvar para offline na página de um livro.' : 'Quando houver livros correspondentes, eles aparecerão aqui.'" />
     <nav v-if="pages > 1" class="pagination" aria-label="Paginação"><button class="button button--secondary" :disabled="page === 1" @click="move(-1)">Anterior</button><span>Página {{ page }} de {{ pages }}</span><button class="button button--secondary" :disabled="page === pages" @click="move(1)">Próxima</button></nav>
   </div>
 </template>
