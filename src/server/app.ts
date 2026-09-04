@@ -661,10 +661,12 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   const webRoot = path.join(projectRoot, 'dist/web')
   if (fs.existsSync(webRoot)) {
     app.use(express.static(webRoot, { index: false }))
-    app.use((req, res, next) => {
-      if (req.path.startsWith('/assets/') || req.path.startsWith('/icons/') || /\.(?:js|mjs|css|map|woff2?|ttf|otf|png|jpe?g|svg|webp|ico|webmanifest)$/i.test(req.path)) { res.status(404).type('text').send('Asset not found'); return }
-      next()
-    })
+  }
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/assets/') || req.path.startsWith('/icons/') || /\.(?:js|mjs|css|map|woff2?|ttf|otf|png|jpe?g|svg|webp|ico|webmanifest)$/i.test(req.path)) { res.status(404).type('text').send('Asset not found'); return }
+    next()
+  })
+  if (fs.existsSync(webRoot)) {
     app.get(['/', '/*path'], (_req, res) => res.sendFile(path.join(webRoot, 'index.html')))
   }
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
