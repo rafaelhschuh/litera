@@ -184,6 +184,8 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   await expect(page.locator(`a[href="/books/${pdf.id}"]`).first()).toBeVisible()
   await page.goto(`/read/${epub.id}`)
   await ready(page)
+  await expect(page.locator('.reader-sync')).not.toContainText('Offline')
+  await expect(page.locator('.reader-sync')).not.toContainText('Sincronizado.')
   await page.reload()
   await ready(page)
   await epubAssets(page, 1)

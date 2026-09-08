@@ -30,7 +30,7 @@ const id = Number(route.params.id)
 const shell = ref<HTMLElement>(), stage = ref<HTMLElement>(), frame = ref<HTMLIFrameElement>()
 const pdfSpread = ref<HTMLElement>(), panelClose = ref<HTMLButtonElement>()
 const book = ref<Book>(), state = ref<'loading' | 'ready' | 'error'>('loading'), message = ref(''), syncMessage = ref('')
-const readerNotice = computed(() => syncMessage.value || syncState.message || (syncState.syncing ? `Sincronizando ${syncState.pending} alterações…` : syncState.pending ? `${syncState.pending} alterações aguardando envio` : ''))
+const readerNotice = computed(() => syncMessage.value || (syncState.syncing ? `Sincronizando ${syncState.pending} alterações…` : syncState.pending ? `${syncState.pending} alterações aguardando envio` : ''))
 const hasProgressConflict = computed(() => syncState.conflicts.some(conflict => conflict.bookId === id && conflict.kind === 'progress'))
 const resolvingConflict = ref(false)
 const toc = ref<Chapter[]>([]), currentChapter = ref(0), epubRatio = ref(0), frameSources = ref(['', '']), activeFrame = ref(0), epubBusy = ref(false)
@@ -334,7 +334,16 @@ async function ensurePdf() {
 }
 async function initPdf(saved: any) {
   currentPage.value = Math.max(1, saved?.locator?.page ?? 1); readerMode.value = resolvePdfReaderMode(route.query.mode, saved?.locator?.type); zoomMode.value = innerWidth < 640 ? 'fit-width' : 'fit-page'; twoPage.value = usesTwoPageSpread(innerWidth, innerHeight)
-  state.value = 'ready'; await nextTick(); attachStage(); if (readerMode.value === 'reflow') await loadReflow(saved?.locator); else await renderPdf(); restoring = false
+  state.value = 'ready'; await nextTick(); attachStage()
+  if (readerMode.value === 'reflow') await loadReflow(saved?.locator)
+  else {
+    try { await renderPdf() }
+    catch (error) {
+      log('pdf-visual-fallback', { message: errorMessage(error) })
+      readerMode.value = 'reflow'; renders.cancel(); await nextTick(); attachStage(); await loadReflow(saved?.locator)
+    }
+  }
+  restoring = false
 }
 function textNodes(root: Node) {
   const document = root.ownerDocument ?? root as Document, walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
@@ -651,7 +660,7 @@ onBeforeUnmount(() => {
     <AppState v-if="state === 'loading'" kind="loading" />
     <AppState v-else-if="state === 'error'" kind="error" title="Não foi possível abrir este livro" :message="message"><button class="button button--primary" @click="retry">Tentar novamente</button> <RouterLink class="button button--secondary" :to="`/books/${id}`">Voltar ao livro</RouterLink></AppState>
     <template v-else>
-      <p v-if="readerNotice || !syncState.online || hasProgressConflict" class="reader-sync" role="status"><span v-if="!syncState.online">Offline · </span>{{ readerNotice || (!syncState.online ? 'Leitura neste dispositivo.' : '') }} <button v-if="hasProgressConflict" class="text-link" :disabled="resolvingConflict" @click="useServerPosition">Usar posição do servidor</button></p><output v-if="debug" class="reader-debug">{{ interactionMode }} · {{ readerPosition }} · {{ zoomMode }} {{ Math.round(zoom * 100) }}%</output>
+      <p v-if="readerNotice || hasProgressConflict" class="reader-sync" role="status">{{ readerNotice }} <button v-if="hasProgressConflict" class="text-link" :disabled="resolvingConflict" @click="useServerPosition">Usar posição do servidor</button></p><output v-if="debug" class="reader-debug">{{ interactionMode }} · {{ readerPosition }} · {{ zoomMode }} {{ Math.round(zoom * 100) }}%</output>
       <div v-if="selectedQuote" class="selection-toolbar" role="toolbar" aria-label="Ações do trecho selecionado" data-reader-interactive><span>“{{ selectedQuote.slice(0, 70) }}<template v-if="selectedQuote.length > 70">…</template>”</span><button class="button button--tonal" :disabled="savingHighlight" @click="saveHighlight"><UiIcon name="sparkles" />{{ savingHighlight ? 'Salvando…' : 'Destacar' }}</button><button class="icon-button" aria-label="Fechar ações do trecho" @click="clearSelection"><UiIcon name="x" :size="16" /></button></div>
       <button v-if="panel" class="reader-panel-backdrop" aria-label="Fechar painel" @click="closePanel()" />
       <aside v-if="panel" class="reader-toc" role="dialog" aria-modal="true" data-reader-interactive>

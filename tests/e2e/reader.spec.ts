@@ -81,6 +81,15 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
 test.describe('PDF adaptation', () => {
 // Fault injection must reach the page request instead of an existing service worker.
 test.use({ serviceWorkers: 'block' })
+test('PDF falls back to adapted reading when the visual engine is unavailable', async ({ page }) => {
+  await page.route(/\/api\/v1\/books\/\d+\/content$/, route => route.fulfill({ status: 200, contentType: 'application/pdf', body: 'invalid PDF for visual-engine fault injection' }))
+  await openBook(page, 'Fidelidade PDF')
+  await expect(page.locator('.reader-document')).toContainText('INICIO:')
+  await expect(page.getByText('Não foi possível abrir este livro')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await expect(page.getByRole('button', { name: 'Texto adaptado' })).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('PDF: direct adapted opening, readable paragraphs, restore and extracted illustrations', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   await page.setViewportSize({ width: 390, height: 844 })

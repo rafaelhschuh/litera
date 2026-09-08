@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 — 2026-09-07
+
+- Leitor deixa de exibir avisos persistentes de estado offline e sincronização concluída; alterações pendentes, conflitos e erros locais continuam visíveis.
+- PDFs passam automaticamente ao modo de texto adaptado quando o motor visual não é suportado pelo Safari do dispositivo, preservando a abertura e a navegação no iPhone.
+
 ## 0.5.0 — 2026-09-04
 
 - PWA instalável com app shell versionado, rotas essenciais em reload/cold start offline e atualização aplicada somente após consentimento, sem apagar conteúdo privado.
