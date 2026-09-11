@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 — 2026-09-11
+
+- Leitor deixa de exibir a notificação persistente de alterações pendentes enquanto está offline; erros locais e conflitos de progresso continuam visíveis.
+
 ## 0.5.1 — 2026-09-07
 
 - Leitor deixa de exibir avisos persistentes de estado offline e sincronização concluída; alterações pendentes, conflitos e erros locais continuam visíveis.
