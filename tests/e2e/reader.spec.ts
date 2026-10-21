@@ -54,7 +54,7 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   expect(await position(page)).toEqual(selectedPosition)
   await page.getByRole('button', { name: 'Fechar ações do trecho' }).click()
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
-  await page.getByRole('button', { name: '+', exact: true }).click()
+  await page.getByRole('button', { name: 'Aumentar texto', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
   await expect.poll(async () => active(page).locator('.reader-document').evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(19.8, 2)
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
@@ -116,7 +116,7 @@ test('PDF: direct adapted opening, readable paragraphs, restore and extracted il
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await expect.poll(async () => Math.abs(await scroll() - savedScroll)).toBeLessThan(4)
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
-  await page.getByRole('button', { name: '+', exact: true }).click()
+  await page.getByRole('button', { name: 'Aumentar texto', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
   await expect.poll(scroll).toBeGreaterThan(0)
   let screens = 0
@@ -243,4 +243,123 @@ test('EPUB chapter commit keeps an outgoing presentation and reverses correctly'
   expect(animation).toEqual({ duration: 240, iframeTransform: 'none' })
   await page.screenshot({ path: `test-results/transition-${info.project.name}.png` })
   await page.evaluate(() => document.getAnimations().forEach(animation => animation.finish()))
+})
+
+test('automatic progress sync stays silent while pending and after confirmation', async ({ page }) => {
+  await openBook(page, 'A Ilha de Teste')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  let release!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/api/v1/books/*/progress', async route => {
+    if (route.request().method() === 'PUT') await held
+    await route.continue()
+  })
+  const sending = page.waitForRequest(request => request.method() === 'PUT' && request.url().endsWith('/progress'))
+  await page.keyboard.press('ArrowRight')
+  const request = await sending
+  await expect(page.locator('.reader-sync')).toHaveCount(0)
+  const confirmed = page.waitForResponse(response => response.request() === request)
+  release()
+  expect((await confirmed).ok()).toBe(true)
+  await expect(page.locator('.reader-sync')).toHaveCount(0)
+  await page.getByRole('link', { name: 'Voltar ao livro' }).focus()
+  await page.getByRole('link', { name: 'Voltar ao livro' }).click()
+  await expect(page.locator('.offline-status')).not.toContainText(/Sincronizando|Sincronizado|aguardando envio/)
+})
+
+test('Chrome theme color follows system, reading theme and leaving the reader', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.goto('/login')
+  const color = page.locator('meta[name="theme-color"]')
+  await expect(color).toHaveAttribute('content', '#191918')
+  await openBook(page, 'A Ilha de Teste')
+  await expect(color).toHaveAttribute('content', '#fff')
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Leitura' })
+  for (const [label, value, scheme] of [['Escuro', '#20201e', 'dark'], ['Sépia', '#f4ead6', 'light'], ['Claro', '#fff', 'light']]) {
+    await dialog.getByRole('button', { name: label, exact: true }).click()
+    await expect(color).toHaveAttribute('content', value)
+    await expect(page.locator('html')).toHaveCSS('color-scheme', scheme!)
+    await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  }
+  await dialog.getByRole('button', { name: 'Fechar painel' }).click()
+  await page.getByRole('link', { name: 'Voltar ao livro' }).click()
+  await expect(color).toHaveAttribute('content', '#191918')
+  await expect(page.locator('html')).not.toHaveAttribute('data-reader-theme')
+  await page.emulateMedia({ colorScheme: 'light' })
+  await expect(color).toHaveAttribute('content', '#f5f4f1')
+})
+
+test('reader controls fit narrow screens and dialogs contain keyboard navigation', async ({ page }, info) => {
+  await openBook(page, 'A Ilha de Teste')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  const settings = page.getByRole('button', { name: 'Configurações de leitura' })
+  await settings.focus()
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 844 })
+    const bounds = await page.locator('.reader-toolbar').evaluate(toolbar => {
+      const rect = toolbar.getBoundingClientRect()
+      return [...toolbar.querySelectorAll('button,a')].filter(el => el.getBoundingClientRect().width).every(el => {
+        const button = el.getBoundingClientRect()
+        return button.left >= rect.left && button.right <= rect.right && button.width >= 44
+      })
+    })
+    expect(bounds).toBe(true)
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await settings.click()
+  const dialog = page.getByRole('dialog', { name: 'Leitura' })
+  await expect(dialog).toBeVisible()
+  const before = await position(page)
+  await page.keyboard.press('ArrowRight')
+  expect(await position(page)).toEqual(before)
+  await dialog.getByRole('button', { name: 'Alternar tela cheia' }).focus()
+  await page.keyboard.press('Tab')
+  expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true)
+  await page.screenshot({ path: `test-results/reader-settings-${info.project.name}.png` })
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(settings).toBeFocused()
+  await settings.click()
+  await page.getByRole('button', { name: 'Buscar no livro', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Buscar no livro' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await active(page).locator('body').evaluate(() => { window.focus() })
+  await expect(page.locator('.reader-toolbar')).toBeHidden()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('link', { name: 'Voltar ao livro' })).toBeFocused()
+})
+
+test('a real progress conflict still offers the server position', async ({ page }) => {
+  await openBook(page, 'A Ilha de Teste')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  const id = new URL(page.url()).pathname.split('/').pop()
+  const endpoint = `/api/v1/books/${id}/progress`
+  const before = (await (await page.request.get(endpoint)).json()).progress
+  const locator = { type: 'epub-cfi', cfi: 'epubcfi(/6/2!/4/62)', chapterHref: 'chapter-1.xhtml', elementIndex: 30, offset: 0 }
+  expect((await page.request.put(endpoint, { data: { format: 'epub', progressRatio: .4, locator, revision: before.revision } })).ok()).toBe(true)
+  await page.keyboard.press('ArrowRight')
+  const conflict = page.getByRole('alert')
+  await expect(conflict).toContainText('Sua posição mudou em outro dispositivo')
+  await conflict.getByRole('button', { name: 'Usar posição do servidor' }).click()
+  await expect(active(page).locator('.reader-document')).toBeVisible()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  expect((await (await page.request.get(endpoint)).json()).progress.locator).toMatchObject(locator)
+})
+
+test('PDF original and adapted modes use the same themed controls', async ({ page }) => {
+  await openBook(page, 'Fidelidade PDF')
+  await expect(page.locator('.pdf-canvas').first()).toBeVisible()
+  const color = page.locator('meta[name="theme-color"]')
+  await expect(color).toHaveAttribute('content', '#121211')
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await page.getByRole('button', { name: 'Texto adaptado', exact: true }).click()
+  await expect(page.locator('.reader-document')).toBeVisible()
+  await expect(color).toHaveAttribute('content', '#fff')
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await page.getByRole('button', { name: 'Documento original', exact: true }).click()
+  await expect(page.locator('.pdf-canvas').first()).toBeVisible()
+  await expect(color).toHaveAttribute('content', '#121211')
 })

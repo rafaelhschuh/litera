@@ -426,7 +426,7 @@ async function drain(ctx: Context): Promise<void> {
     }
   }
   await refresh(ctx)
-  if (!syncState.pending) syncState.message = 'Sincronizado.'
+  if (!syncState.pending) syncState.message = ''
   const pending = await transaction('readonly', tx => operations(tx, ctx.userId), ctx)
   const heads = new Map<string, Operation>()
   for (const item of pending.sort((a, b) => a.sequence - b.sequence)) if (!heads.has(item.key)) heads.set(item.key, item)
@@ -515,5 +515,5 @@ export async function resolveProgressConflict(bookId: number, choice: 'server'):
     putState(tx, ctx, key, server)
   }, ctx)
   await refresh(ctx)
-  syncState.message = 'Posição do servidor restaurada.'
+  syncState.message = ''
 }

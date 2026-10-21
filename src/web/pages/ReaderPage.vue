@@ -1,16 +1,18 @@
 <script setup lang="ts">
 /* eslint-disable no-undef */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import AppState from '../components/AppState.vue'
 import ReaderTextContent from '../components/ReaderTextContent.vue'
+import ReaderSettings from '../components/ReaderSettings.vue'
+import UiDialog from '../components/UiDialog.vue'
 import UiIcon from '../components/UiIcon.vue'
 import { api } from '../lib/api'
 import { resolveProgressConflict, syncState } from '../lib/offline-sync'
 import { openBookSource, type BookSource, type SourceView } from '../lib/book-source'
 import { attachReaderInput } from '../lib/reader-input'
-import { applyTheme } from '../lib/theme'
+import { applyReaderTheme, applyTheme } from '../lib/theme'
 import { fitPdfScale, movePdfSpread, pdfSpreadPages, RenderGeneration, resolvePdfReaderMode, usesTwoPageSpread, usesTwoPageSpreadAtZoom, type PdfReaderMode, type PdfZoomMode } from '../../shared/pdf-reader'
 import { pdfTextSignature, type PdfReflowBlock, type PdfReflowFigure } from '../../shared/pdf-reflow'
 import { readerCapabilities, readerTapZone } from '../../shared/reader'
@@ -28,9 +30,9 @@ const route = useRoute()
 const router = useRouter()
 const id = Number(route.params.id)
 const shell = ref<HTMLElement>(), stage = ref<HTMLElement>(), frame = ref<HTMLIFrameElement>()
-const pdfSpread = ref<HTMLElement>(), panelClose = ref<HTMLButtonElement>()
+const pdfSpread = ref<HTMLElement>()
 const book = ref<Book>(), state = ref<'loading' | 'ready' | 'error'>('loading'), message = ref(''), syncMessage = ref('')
-const readerNotice = computed(() => syncMessage.value || (!syncState.online ? '' : syncState.syncing ? `Sincronizando ${syncState.pending} alterações…` : syncState.pending ? `${syncState.pending} alterações aguardando envio` : ''))
+const readerNotice = computed(() => syncMessage.value || (syncState.online ? syncState.message : ''))
 const hasProgressConflict = computed(() => syncState.conflicts.some(conflict => conflict.bookId === id && conflict.kind === 'progress'))
 const resolvingConflict = ref(false)
 const toc = ref<Chapter[]>([]), currentChapter = ref(0), epubRatio = ref(0), frameSources = ref(['', '']), activeFrame = ref(0), epubBusy = ref(false)
@@ -50,6 +52,9 @@ const turnDirection = ref<'' | 'next' | 'prev'>(''), searchQuery = ref(''), sear
 const pinchScale = ref(1), pinchOrigin = ref({ x: 0, y: 0 })
 const toolbarPosition = ref<'top' | 'bottom'>('top'), twoPage = ref(false)
 const capabilities = computed(() => readerCapabilities(book.value?.format ?? 'epub'))
+watch([book, readerMode, readerTheme], () => {
+  applyReaderTheme(book.value ? (book.value.format === 'pdf' && readerMode.value === 'visual' ? 'original' : readerTheme.value) : undefined)
+})
 const activePdfPages = computed(() => pdfSpreadPages(currentPage.value, pageCount.value, twoPage.value && readerMode.value === 'visual'))
 const pageRatio = computed(() => pageCount.value > 1 ? (currentPage.value - 1) / (pageCount.value - 1) : 0)
 const readerRatio = computed(() => book.value?.format === 'pdf' ? pageRatio.value : epubRatio.value)
@@ -119,7 +124,7 @@ function scheduleChrome() {
   if (panel.value || selectedQuote.value || interactionMode.value !== 'idle') { chrome.value = 'locked'; return }
   chrome.value = 'visible'; chromeTimer = window.setTimeout(() => { chrome.value = 'hidden' }, 2800)
 }
-function showChrome(lock = false) { chrome.value = lock ? 'locked' : 'visible'; if (!lock) scheduleChrome() }
+function showChrome(lock = false) { clearTimeout(chromeTimer); chrome.value = lock ? 'locked' : 'visible'; if (!lock) scheduleChrome() }
 function setMode(mode: ReaderInteractionMode) {
   interactionMode.value = mode; log('input', { mode })
   if (['selecting', 'pinching', 'ui-interaction'].includes(mode)) showChrome(true)
@@ -563,7 +568,10 @@ async function adjustText(delta: number) { captureReflow(); textScale.value = Ma
 async function changeSetting() { if (book.value?.format === 'epub') reloadEpub(); else if (readerMode.value === 'reflow') { await nextTick(); restoreReflow(reflowLocator); captureReflow() } await persistSettings() }
 function setTheme(theme: 'light' | 'sepia' | 'dark') { readerTheme.value = theme; if (book.value?.format === 'epub') reloadEpub(); void persistSettings() }
 function setToolbarPosition(position: 'top' | 'bottom') { toolbarPosition.value = position; try { localStorage.setItem('litera-reader-toolbar-position', position) } catch { /* Optional preference: storage denial must not stop reading. */ }; showChrome() }
-async function persistSettings() { await api('/api/v1/settings', { method: 'PUT', body: JSON.stringify({ theme: readerTheme.value, fontScale: textScale.value, lineHeight: lineHeight.value, margins: margins.value, appTheme: appTheme.value, reducedMotion: reducedMotion.value, pdfInvert: pdfInvert.value }) }) }
+async function persistSettings() {
+  try { await api('/api/v1/settings', { method: 'PUT', body: JSON.stringify({ theme: readerTheme.value, fontScale: textScale.value, lineHeight: lineHeight.value, margins: margins.value, appTheme: appTheme.value, reducedMotion: reducedMotion.value, pdfInvert: pdfInvert.value }) }) }
+  catch (error) { syncMessage.value = errorMessage(error) }
+}
 function clearSelection() { selectedQuote.value = ''; selectedLocator.value = undefined; getSelection()?.removeAllRanges(); frame.value?.contentWindow?.getSelection()?.removeAllRanges(); setMode('idle'); showChrome() }
 async function saveHighlight() {
   if (!selectedQuote.value || !selectedLocator.value || !book.value) return; savingHighlight.value = true
@@ -575,12 +583,31 @@ async function searchBook() {
 }
 async function openResult(result: any) { if (book.value?.format === 'epub') await goToc({ id: result.href, href: result.href, label: result.label }); else { currentPage.value = result.page; if (readerMode.value === 'reflow') await safely(loadReflow); else await safely(renderPdf); closePanel() } }
 
-function togglePanel(next: Panel, event?: MouseEvent) { const value = panel.value === next ? null : next; if (value) panelTrigger = event?.currentTarget as HTMLElement; panel.value = value; if (value) { showChrome(true); void nextTick(() => panelClose.value?.focus()) } else closePanel() }
-function closePanel(focus = true) { searchGeneration++; searching.value = false; panel.value = null; if (focus) panelTrigger?.focus(); panelTrigger = undefined; showChrome() }
+function togglePanel(next: Panel, event?: MouseEvent) {
+  if (panel.value === next) { closePanel(); return }
+  if (!panel.value) panelTrigger = event?.currentTarget as HTMLElement ?? document.activeElement as HTMLElement
+  panel.value = next; showChrome(true)
+}
+function closePanel(focus = true) {
+  const trigger = panelTrigger
+  searchGeneration++; searching.value = false; panel.value = null; panelTrigger = undefined; showChrome()
+  // The modal makes the toolbar inert until Vue removes the dialog.
+  if (focus) void nextTick(() => trigger?.focus())
+}
 async function toggleFullscreen() { try { if (!document.fullscreenElement) { if (!shell.value?.requestFullscreen) { syncMessage.value = 'Tela cheia não é suportada neste navegador.'; return } await shell.value.requestFullscreen() } else await document.exitFullscreen() } catch { syncMessage.value = 'Não foi possível alternar a tela cheia neste dispositivo.' } }
 function onKey(event: KeyboardEvent) {
+  if (event.key === 'Tab' && chrome.value === 'hidden' && !panel.value) {
+    event.preventDefault(); showChrome(true)
+    void nextTick(() => {
+      const controls = shell.value?.querySelectorAll<HTMLElement>('.reader-toolbar a, .reader-toolbar button:not(:disabled)')
+      const target = controls?.[event.shiftKey ? controls.length - 1 : 0]
+      target?.focus()
+    })
+    return
+  }
   if ((event.target as HTMLElement)?.matches?.('input,textarea,select,[contenteditable="true"]')) return
   if (event.key === 'Escape' && panel.value) { event.preventDefault(); closePanel(); return }
+  if (panel.value) return
   if (event.key === ' ' && (event.target as Element)?.closest?.('button,a,[role="button"]')) return
   if (event.key === 'ArrowLeft' || event.key === 'PageUp') { event.preventDefault(); void move(-1) }
   else if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); void move(1) }
@@ -638,17 +665,18 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (book.value?.format === 'epub') captureEpub(); else captureReflow(); unmounting = true; removeEventListener('keydown', onKey); removeEventListener('resize', scheduleLayout); removeEventListener('orientationchange', scheduleLayout); visualViewport?.removeEventListener('resize', scheduleLayout); document.removeEventListener('fullscreenchange', scheduleLayout); document.removeEventListener('visibilitychange', visibility); document.removeEventListener('selectionchange', documentSelection); removeEventListener('pagehide', visibility)
   epubAbort?.abort(); epubGeneration++; presentation?.remove(); resizeObserver?.disconnect(); stageInputCleanup?.(); frameInputCleanup?.(); frameEventCleanup?.(); renders.cancel(); for (const layer of pdfTextLayers) layer?.cancel?.(); reflowGeneration++; searchGeneration++; clearTimeout(chromeTimer); clearTimeout(layoutTimer); cancelAnimationFrame(viewportFrame); cancelAnimationFrame(selectionFrame); bookSource?.dispose(); reflowView = undefined; epubViews.fill(undefined); fallbackReady?.(); fallbackReady = undefined; pdf = undefined; try { void pdfLoadingTask?.destroy?.().catch(() => undefined) } catch { /* deterministic cleanup */ }
+  applyReaderTheme()
   document.body.style.overflow = bodyOverflow; document.body.style.overscrollBehavior = bodyOverscroll
 })
 </script>
 
 <template>
   <div ref="shell" class="reader-shell" :class="{ 'reader-shell--focus': chrome === 'hidden', 'reader-shell--toolbar-bottom': toolbarPosition === 'bottom' }">
-    <header class="reader-toolbar" data-reader-interactive>
-      <div class="reader-toolbar__edge reader-toolbar__edge--start"><RouterLink class="icon-button" :to="`/books/${id}`" aria-label="Voltar ao livro"><UiIcon name="arrow-left" /></RouterLink></div>
+    <header class="reader-toolbar" data-reader-interactive @focusin="showChrome(true)" @focusout="scheduleChrome">
+      <div class="reader-toolbar__edge reader-toolbar__edge--start"><RouterLink class="icon-button" :to="`/books/${id}`" aria-label="Voltar ao livro"><UiIcon name="arrow-left" /></RouterLink><strong class="reader-book-title">{{ book?.title }}</strong></div>
       <nav class="reader-page-controls" aria-label="Navegação da leitura">
         <button class="icon-button" aria-label="Voltar na leitura" :disabled="!canMovePrevious" @click="move(-1)"><UiIcon name="chevron-left" /></button>
-        <div class="reader-progress"><span>{{ readerPosition }}</span><i><b :style="{ width: `${Math.round(readerRatio * 100)}%` }" /></i></div>
+        <div class="reader-progress"><span :title="readerPosition">{{ readerPosition }}</span><progress aria-label="Progresso de leitura" :value="readerRatio" max="1" /></div>
         <button class="icon-button" aria-label="Avançar na leitura" :disabled="!canMoveNext" @click="move(1)"><UiIcon name="chevron-right" /></button>
       </nav>
       <div class="reader-toolbar__edge reader-toolbar__edge--end reader-actions">
@@ -660,21 +688,13 @@ onBeforeUnmount(() => {
     <AppState v-if="state === 'loading'" kind="loading" />
     <AppState v-else-if="state === 'error'" kind="error" title="Não foi possível abrir este livro" :message="message"><button class="button button--primary" @click="retry">Tentar novamente</button> <RouterLink class="button button--secondary" :to="`/books/${id}`">Voltar ao livro</RouterLink></AppState>
     <template v-else>
-      <p v-if="readerNotice || hasProgressConflict" class="reader-sync" role="status">{{ readerNotice }} <button v-if="hasProgressConflict" class="text-link" :disabled="resolvingConflict" @click="useServerPosition">Usar posição do servidor</button></p><output v-if="debug" class="reader-debug">{{ interactionMode }} · {{ readerPosition }} · {{ zoomMode }} {{ Math.round(zoom * 100) }}%</output>
+      <div v-if="readerNotice || hasProgressConflict" class="reader-sync" role="alert" data-reader-interactive><p>{{ hasProgressConflict ? 'Sua posição mudou em outro dispositivo. Escolha a posição do servidor para continuar.' : readerNotice }}</p><button v-if="hasProgressConflict" class="button button--secondary" :disabled="resolvingConflict" @click="useServerPosition">Usar posição do servidor</button><button v-if="syncMessage && !hasProgressConflict" class="icon-button" aria-label="Dispensar aviso" @click="syncMessage = ''"><UiIcon name="x" /></button></div><output v-if="debug" class="reader-debug">{{ interactionMode }} · {{ readerPosition }} · {{ zoomMode }} {{ Math.round(zoom * 100) }}%</output>
       <div v-if="selectedQuote" class="selection-toolbar" role="toolbar" aria-label="Ações do trecho selecionado" data-reader-interactive><span>“{{ selectedQuote.slice(0, 70) }}<template v-if="selectedQuote.length > 70">…</template>”</span><button class="button button--tonal" :disabled="savingHighlight" @click="saveHighlight"><UiIcon name="sparkles" />{{ savingHighlight ? 'Salvando…' : 'Destacar' }}</button><button class="icon-button" aria-label="Fechar ações do trecho" @click="clearSelection"><UiIcon name="x" :size="16" /></button></div>
-      <button v-if="panel" class="reader-panel-backdrop" aria-label="Fechar painel" @click="closePanel()" />
-      <aside v-if="panel" class="reader-toc" role="dialog" aria-modal="true" data-reader-interactive>
-        <header><h2>{{ panel === 'toc' ? 'Sumário' : panel === 'settings' ? 'Leitura' : 'Buscar no livro' }}</h2><button ref="panelClose" class="icon-button" aria-label="Fechar painel" @click="closePanel()"><UiIcon name="x" /></button></header>
+      <UiDialog v-if="panel" :open="true" :title="panel === 'toc' ? 'Sumário' : panel === 'settings' ? 'Leitura' : 'Buscar no livro'" close-label="Fechar painel" class="reader-toc" data-reader-interactive @close="closePanel()">
         <template v-if="panel === 'toc'"><button v-for="item in toc" :key="item.href" @click="goToc(item)">{{ item.label }}</button></template>
-        <template v-else-if="panel === 'settings'">
-          <p>Posição dos controles</p><div class="reader-fit-row"><button :aria-pressed="toolbarPosition === 'top'" @click="setToolbarPosition('top')">Topo</button><button :aria-pressed="toolbarPosition === 'bottom'" @click="setToolbarPosition('bottom')">Base</button></div>
-          <template v-if="book?.format === 'pdf'"><p>Modo de leitura</p><div class="reader-fit-row"><button :aria-pressed="readerMode === 'visual'" @click="readerMode !== 'visual' && togglePdfMode()">Documento original</button><button :aria-pressed="readerMode === 'reflow'" @click="readerMode !== 'reflow' && togglePdfMode()">Texto adaptado</button></div></template>
-          <template v-if="book?.format === 'epub' || readerMode === 'reflow'"><p>Tamanho do texto</p><div class="reader-settings-row"><button @click="adjustText(-10)">−</button><span>{{ textScale }}%</span><button @click="adjustText(10)">+</button></div><label for="lines">Entrelinhas</label><select id="lines" v-model="lineHeight" @change="changeSetting"><option value="compact">Compacta</option><option value="normal">Normal</option><option value="relaxed">Relaxada</option></select><label for="margins">Largura do texto</label><select id="margins" v-model="margins" @change="changeSetting"><option value="narrow">Estreita</option><option value="normal">Normal</option><option value="wide">Ampla</option></select><p>Tema</p><div class="reader-settings-row"><button :aria-pressed="readerTheme === 'light'" @click="setTheme('light')">Claro</button><button :aria-pressed="readerTheme === 'sepia'" @click="setTheme('sepia')">Sépia</button><button :aria-pressed="readerTheme === 'dark'" @click="setTheme('dark')">Escuro</button></div></template>
-          <template v-else><p>Enquadramento</p><div class="reader-fit-row"><button :aria-pressed="zoomMode === 'fit-width'" @click="setZoomMode('fit-width')">Ajustar largura</button><button :aria-pressed="zoomMode === 'fit-page'" @click="setZoomMode('fit-page')">Página inteira</button></div><p>Zoom manual</p><div class="reader-settings-row"><button @click="adjustZoom(-.2)">−</button><span>{{ Math.round(zoom * 100) }}%</span><button @click="adjustZoom(.2)">+</button></div><label class="reader-invert"><span><strong>Inverter cores</strong><small>Sem alterar o arquivo.</small></span><input v-model="pdfInvert" type="checkbox" @change="persistSettings" /></label></template>
-          <div class="reader-settings-actions"><button @click="toggleFullscreen">Alternar tela cheia</button></div>
-        </template>
+        <ReaderSettings v-else-if="panel === 'settings' && book" v-model:line-height="lineHeight" v-model:margins="margins" v-model:invert="pdfInvert" :format="book.format" :mode="readerMode" :toolbar-position="toolbarPosition" :text-scale="textScale" :theme="readerTheme" :zoom="zoom" :zoom-mode="zoomMode" @toolbar="setToolbarPosition" @mode="togglePdfMode" @text="adjustText" @theme="setTheme" @zoom="adjustZoom" @fit="setZoomMode" @change="changeSetting" @save="persistSettings" @fullscreen="toggleFullscreen" @search="togglePanel('search')" />
         <template v-else><form class="reader-search" @submit.prevent="searchBook"><label for="reader-query">Texto</label><input id="reader-query" v-model="searchQuery" type="search" minlength="2" required /><button class="button button--primary" :disabled="searching">{{ searching ? 'Buscando…' : 'Buscar' }}</button></form><button v-for="result in searchResults" :key="result.href || result.page" @click="openResult(result)"><strong>{{ result.label }}</strong><small>{{ result.excerpt }}</small></button><p v-if="!searchResults.length && !searching && searchQuery">Nenhuma ocorrência encontrada.</p></template>
-      </aside>
+      </UiDialog>
       <main ref="stage" :aria-busy="epubBusy || reflowLoading || layoutChanging" class="reader-stage" :class="[turnDirection && `reader-stage--${turnDirection}`, readerMode === 'reflow' && `reader-stage--theme-${readerTheme}`, { 'reader-stage--pdf': book?.format === 'pdf' && readerMode === 'visual', 'reader-stage--reflow': readerMode === 'reflow', 'reader-stage--text': book?.format === 'epub' || readerMode === 'reflow' }]" @scroll.passive="captureReflow"><template v-if="book?.format === 'epub'"><AppState v-if="!frame" class="reader-initial-loading" kind="loading" title="Abrindo capítulo…" /><iframe v-for="(source, slot) in frameSources" :key="slot" class="epub-stage" :class="{ 'epub-stage--preparing': slot !== activeFrame }" :srcdoc="source" :aria-hidden="slot !== activeFrame" :tabindex="slot === activeFrame ? 0 : -1" title="Conteúdo do EPUB" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" @load="prepareFrame($event, slot)" /></template><ReaderTextContent v-else-if="readerMode === 'reflow'" :blocks="reflowBlocks" :loading="reflowLoading" :theme="readerTheme" :content-style="reflowStyle" :figures="reflowFigures" :image-url="`/api/v1/books/${id}/pdf/figure?page=${currentPage}`" :resolve-asset="reflowAssetResolver" /><div v-else ref="pdfSpread" class="pdf-spread" :class="{ 'pdf-spread--pinching': pinchScale !== 1 }" :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})`, transformOrigin: `${pinchOrigin.x}px ${pinchOrigin.y}px` } : undefined" role="group" :aria-label="readerPosition" /></main>
     </template>
   </div>

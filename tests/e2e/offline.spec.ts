@@ -191,7 +191,7 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   await epubChapter(page, 2)
   await epubAssets(page, 2)
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: '+', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Aumentar texto', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Sépia', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
   await ready(page)

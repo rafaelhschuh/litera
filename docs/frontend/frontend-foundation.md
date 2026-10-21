@@ -57,6 +57,12 @@ The reader is a product subsystem with its own state model. It must support:
 - fullscreen/focus mode;
 - reduced-motion behavior.
 
+Reader controls live in `src/web/reader-controls.css`. EPUB, original PDF and adapted PDF share one toolbar and the `UiDialog` modal pattern, including focus containment and Escape. Reading settings reuse `UiButton` and `UiSwitch`; mobile search remains available from those settings. Keep format-specific rendering and locators separate from these controls.
+
+`--reader-page`, `--reader-text-background` and `--reader-text-color` describe the active light/sepia/dark reading surface. The original PDF uses `--reader-canvas`. Browser/PWA `theme-color` and `color-scheme` follow that surface while reading, and return to the application theme when leaving the reader. The OS still controls its notification shade.
+
+Automatic progress saves and successful synchronization stay silent. Pending queue counts do not create reader overlays or live announcements. Storage failures, expired sessions and progress conflicts remain actionable; conflicts require an explicit server-position choice.
+
 Do not render an entire large EPUB as one uncontrolled DOM tree. Prefer chapter-level/incremental rendering.
 
 ## Shared component expectations

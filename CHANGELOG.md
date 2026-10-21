@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.5 — 2026-10-20
+
+- Sincronização automática de leitura passa a ser silenciosa, sem avisos de envio, contagem de pendências ou confirmação; erros e conflitos continuam acionáveis.
+- EPUB, PDF original e texto adaptado compartilham controles padronizados, configurações com primitives existentes e estilos centralizados.
+- Painéis usam o diálogo compartilhado, com navegação por teclado, contenção e restauração de foco; Tab revela os controles ocultos e a busca permanece disponível no celular.
+- Cor da barra de status do PWA no Chrome acompanha o tema do aplicativo e da leitura, incluindo troca entre PDF original/adaptado e retorno ao catálogo. Validação física no Android permanece no checklist.
+- Testes de regressão cobrem sincronização silenciosa, conflito real de progresso, temas, controles em telas estreitas e acessibilidade dos painéis.
+
 ## 0.5.2 — 2026-09-11
 
 - Leitor deixa de exibir a notificação persistente de alterações pendentes enquanto está offline; erros locais e conflitos de progresso continuam visíveis.

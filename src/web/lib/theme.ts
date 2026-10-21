@@ -3,6 +3,7 @@ import { ref } from 'vue'
 export type AppTheme = 'system' | 'light' | 'dark'
 
 export const appTheme = ref<AppTheme>('system')
+export type ReaderTheme = 'light' | 'sepia' | 'dark' | 'original'
 
 let media: MediaQueryList | undefined
 
@@ -10,11 +11,27 @@ function resolvedTheme(theme: AppTheme): 'light' | 'dark' {
   return theme === 'system' ? (media?.matches ? 'dark' : 'light') : theme
 }
 
+function updateBrowserTheme(): void {
+  const root = document.documentElement
+  const reader = root.dataset.readerTheme
+  const scheme = reader ? (reader === 'dark' || reader === 'original' ? 'dark' : 'light') : resolvedTheme(appTheme.value)
+  root.dataset.theme = scheme
+  root.style.colorScheme = scheme
+  const token = reader === 'original' ? '--reader-canvas' : reader ? '--reader-page' : '--bg'
+  const color = getComputedStyle(root).getPropertyValue(token).trim()
+  if (color) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color)
+}
+
+export function applyReaderTheme(theme?: ReaderTheme): void {
+  if (theme) document.documentElement.dataset.readerTheme = theme
+  else delete document.documentElement.dataset.readerTheme
+  updateBrowserTheme()
+}
+
 export function applyTheme(theme: AppTheme): void {
   appTheme.value = theme
-  document.documentElement.dataset.theme = resolvedTheme(theme)
   document.documentElement.dataset.themePreference = theme
-  document.documentElement.style.colorScheme = resolvedTheme(theme)
+  updateBrowserTheme()
 }
 
 export function initializeTheme(): void {

@@ -4,6 +4,7 @@ import { loadSession } from './lib/auth'
 import { router } from './router'
 import { initializeTheme } from './lib/theme'
 import './styles.css'
+import './reader-controls.css'
 import { initializePwa } from './lib/pwa'
 import { initializeOfflineSync } from './lib/offline-sync'
 
