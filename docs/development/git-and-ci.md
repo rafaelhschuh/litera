@@ -34,3 +34,9 @@ Processo de release:
 git tag -a v0.5.5 -m "Litera 0.5.5"
 git push origin v0.5.5
 ```
+
+## APK Android adicional
+
+O cliente Android é nativo Kotlin/Views sobre a API compartilhada, com Readium/PdfRenderer; veja [ADR-0010](../decisions/ADR-0010-native-android-client.md). O [workflow Android](../../.github/workflows/android.yml) é independente: PR/push com filtros de caminhos do subprojeto/workflow/versão, tags e disparo manual. Usa `contents: read`, valida o wrapper e executa testes unitários, lint e `assembleDebug`; instrumentação roda em job separado de emulador. Publica APK preview, SHA-256 e relatórios como artifacts. Veja [build/release Android](../../android/docs/build-and-release.md).
+
+Versão Android deriva de `package.json` da raiz, sem bump próprio. Chave debug efêmera de CI não oferece atualização estável entre artifacts; assinatura release futura exige keystore externo. Este workflow não anexa APK automaticamente à GitHub Release, não altera a publicação Docker atual e não comprova validação em aparelho físico. Gates de [Android testing](../../android/docs/testing.md) continuam explícitos.

@@ -1,0 +1,31 @@
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="pt">
+    <string name="reader_loading">Abrindo publicação…</string>
+    <string name="reader_error">Não foi possível abrir este livro.</string>
+    <string name="reader_contents">Sumário</string>
+    <string name="reader_appearance">Leitura</string>
+    <string name="reader_save">Aplicar</string>
+    <string name="reader_font">Tamanho do texto: %1$d%%</string>
+    <string name="reader_light">Claro</string>
+    <string name="reader_sepia">Sépia</string>
+    <string name="reader_dark">Escuro</string>
+    <string name="reader_invert">Inverter cores do PDF</string>
+    <string name="reader_awake">Manter tela acesa durante a leitura</string>
+    <string name="reader_conflict">A posição mudou em outro dispositivo</string>
+    <string name="reader_conflict_note">Escolha de onde continuar. A posição local pendente será preservada até sua decisão.</string>
+    <string name="reader_local">Usar posição deste aparelho</string>
+    <string name="reader_remote">Usar posição do servidor</string>
+    <string name="reader_pending">Posição salva neste aparelho. A sincronização está pendente.</string>
+    <string name="reader_sync_conflict">Há uma posição diferente no servidor. Toque para escolher.</string>
+    <string name="reader_return">Voltar à biblioteca</string>
+    <string name="reader_page">Página %1$d de %2$d</string>
+    <string name="reader_chapter">Capítulo %1$d</string>
+    <string name="reader_pdf_description">Página PDF. Use dois dedos para ampliar e arraste para mover.</string>
+    <string name="reader_resource_error">Não foi possível carregar este recurso do livro.</string>
+    <string name="reader_link_blocked">Links externos desta publicação estão bloqueados.</string>
+    <string name="reader_pdf_error">Não foi possível renderizar a página PDF.</string>
+    <string name="reader_invalid">Este livro ou servidor não é válido.</string>
+    <string name="reader_file_changed">O arquivo deste livro foi atualizado</string>
+    <string name="reader_file_changed_note">A posição anterior pode não corresponder à nova edição. Comece do início ou tente restaurar uma posição aproximada. Reiniciar descarta a posição local pendente deste livro.</string>
+    <string name="reader_restart">Começar do início</string>
+    <string name="reader_restore">Tentar restaurar</string>
+</resources>

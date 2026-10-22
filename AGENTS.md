@@ -16,3 +16,5 @@
 13. Treat `/legacy` as a dedicated conservative client over the same API/domain semantics, not as a second backend. Follow `docs/decisions/ADR-0003-legacy-client.md`.
 14. Work in vertical slices: when a feature requires UI, API, persistence, authorization, tests and deployment changes, integrate those layers together rather than leaving one side as long-lived scaffolding.
 15. For staged Codex implementation, follow the exit gates in `CODEX_PROMPTS.md`; do not declare a stage complete while its required end-to-end flows still depend on mocks or TODOs.
+
+16. Android work must also follow [`android/AGENTS.md`](android/AGENTS.md), its linked architecture/security/testing/build contracts and [`ADR-0010`](docs/decisions/ADR-0010-native-android-client.md). Android is a native Kotlin client over the same API, with Readium/PdfRenderer adapters; do not host the website or duplicate backend, authorization or progress semantics. Native storage/offline capabilities are distinct from PWA and must be documented and tested explicitly. Update these cross-links when native boundaries change and never infer real-device validation from a successful APK build.

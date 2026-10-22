@@ -6,6 +6,12 @@ describe('format-aware progress', () => {
   it('keeps an EPUB semantic locator and clamps display progress', () => {
     expect(normalizeProgress('epub', { type: 'epub-cfi', cfi: ' epubcfi(/6/4) ', chapterHref: 'c2.xhtml' }, 1.4)).toEqual({ locator: { type: 'epub-cfi', cfi: 'epubcfi(/6/4)', chapterHref: 'c2.xhtml' }, progressRatio: 1 })
   })
+  it('preserves chapter-relative native EPUB progress and rejects invalid values', () => {
+    const base = { type: 'epub-cfi' as const, cfi: 'epubcfi(/6/4!/4/2)', chapterHref: 'c2.xhtml' }
+    expect(normalizeProgress('epub', { ...base, chapterProgression: .45 }, .7).locator).toMatchObject({ chapterHref: 'c2.xhtml', chapterProgression: .45 })
+    expect(normalizeProgress('epub', { ...base, chapterProgression: 2 }, .7).locator).toMatchObject({ chapterProgression: 1 })
+    expect(() => normalizeProgress('epub', { ...base, chapterProgression: NaN }, .7)).toThrow('finite')
+  })
   it('keeps PDF page location independently from its derived ratio', () => {
     expect(normalizeProgress('pdf', { type: 'pdf-page', page: 99 }, .5, 12).locator).toEqual({ type: 'pdf-page', page: 12, offset: undefined })
     expect(pdfProgress(3, 5)).toBe(.5)

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="space_4">16dp</dimen>
+    <dimen name="touch_target">48dp</dimen>
+    <dimen name="text_body">16sp</dimen>
+    <dimen name="text_caption">14sp</dimen>
+    <dimen name="text_book_title">18sp</dimen>
+    <dimen name="text_section">22sp</dimen>
+</resources>

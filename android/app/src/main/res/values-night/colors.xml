@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="litera_background">#191918</color>
+    <color name="litera_surface">#222221</color>
+    <color name="litera_text">#efede8</color>
+    <color name="litera_muted">#b8b3ab</color>
+    <color name="litera_accent">#bb7185</color>
+    <color name="litera_accent_soft">#432c34</color>
+    <color name="litera_on_accent">#21191c</color>
+    <color name="litera_danger">#df8383</color>
+</resources>

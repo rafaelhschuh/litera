@@ -293,7 +293,7 @@ Execute uma revisão sistemática e complete:
 
 1. Fechamento de escopo/requisitos
 - Faça uma matriz FR/NFR -> implementação -> testes.
-- Para FR-001..FR-012 e NFR-001..NFR-006, identifique gaps reais e implemente os que pertencem ao 1.0.
+- Para FR-001..FR-013 e NFR-001..NFR-006, identifique gaps reais e implemente os que pertencem ao 1.0.
 - Não adicione features fora de escopo só por serem interessantes.
 - Resolva marcadores de pendência/FIXME/HACK em caminho crítico; documente apenas dívida não bloqueante.
 
@@ -407,3 +407,12 @@ O. O produto não depende de mocks/pendências marcadas no código/fake data em 
 
 Depois dos gates, faça uma última revisão como release engineer, security reviewer e usuário final. Corrija regressões encontradas. Gere um resumo final curto com: versão RC, comandos exatos de install/upgrade/test, migrations executadas, matriz de compatibilidade, checks de segurança, limitações conhecidas e lista objetiva do que impediria promover este RC para 1.0 final (idealmente nenhuma).
 ```
+
+
+## Contrato adicional — Android nativo
+
+Quando um estágio tocar Android, leia [`android/AGENTS.md`](android/AGENTS.md), [`android/README.md`](android/README.md), [ADR-0010](docs/decisions/ADR-0010-native-android-client.md) e contratos ligados de arquitetura, segurança, testes e build. Inclua FR-013 e preserve FR-012 e gates web/legacy.
+
+Implemente verticalmente com telas Kotlin nativas: servidor -> login -> biblioteca/busca/detalhe -> EPUB/PDF -> restauração e conflitos pela API real. Não carregar o site como UI. Reutilize autorização, arquivos/revisões e locators; Readium/PdfRenderer ficam atrás de adapters, sem engine EPUB artesanal ou backend duplicado. Preserve tokens Litera, ícone adaptativo seguro, barras/insets e sessão cifrada por origem.
+
+Cache de arquivos nativo não implementa outbox/catalogo offline do PWA; documente capacidades efetivas e teste lifecycle/isolamento antes de anunciá-las. Execute Gradle/CI e gates compartilhados pertinentes, registrando emulador e aparelho separadamente em [Android testing](android/docs/testing.md). Não concluir estágio com mocks no fluxo principal, assinatura debug apresentada como release ou cenários físicos/offline sem evidência. Atualize ADR, contratos do subprojeto e links da raiz quando mudar fronteiras.

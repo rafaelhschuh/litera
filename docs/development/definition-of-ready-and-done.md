@@ -33,3 +33,9 @@ A work item is done only when:
 ## Release-stage rule
 
 Each Codex implementation stage (MVP, Beta, RC) must finish with a runnable integrated product. A stage is not complete if only one architectural layer is substantially implemented while another required layer remains scaffolding.
+
+## Android native client gates
+
+Readiness requires [android/AGENTS.md](../../android/AGENTS.md), [ADR-0010](../decisions/ADR-0010-native-android-client.md) and linked contracts. Classify effects on web/PWA and legacy; define native API/locator compatibility, engine capabilities, origin/session boundaries, lifecycle, cache/offline and signing before implementation.
+
+Done requires relevant Android unit tests, lint and APK assembly, instrumented coverage for changed native flows, and web/API checks when shared behavior changes. Record exact evidence in [Android testing](../../android/docs/testing.md), including pending real-server and physical scenarios. APK assembly alone does not prove native login -> catalog -> EPUB/PDF -> restored locator, conflict revision, origin/account isolation, adaptive icon, system bars or cached-file reading. Do not claim full offline from file cache or release stability from debug signing. Required paths cannot rely on website wrappers, mocked engines or undocumented TODOs.

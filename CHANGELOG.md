@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Subprojeto Android Kotlin em `android/` com telas nativas de servidor, login, catálogo/detalhe e controles de leitura pela API compartilhada; adapters Readium para EPUB e Android PdfRenderer para PDF, sessão cifrada e cache privado por origem/conta/revisão.
+- Workflow Android adicional gera APK de preview, checksums, relatórios e testes nativos em emulador; assinatura estável e validação física permanecem etapas explícitas.
+- Locator EPUB admite progressão opcional dentro do capítulo para restauração Android/web, preservando os locators de elemento da web; testes cobrem persistência/revisão e restauração.
+- Contrato Android, ADR, guias e referências na documentação raiz mantêm claras as responsabilidades web/nativo e os gates para mudanças futuras.
+
 ## 0.5.5 — 2026-10-20
 
 - Sincronização automática de leitura passa a ser silenciosa, sem avisos de envio, contagem de pendências ou confirmação; erros e conflitos continuam acionáveis.

@@ -61,3 +61,9 @@ Docker Compose
 ```
 
 The exact database engine and process split remain engineering decisions unless later requirements make them architectural constraints.
+
+## Android native client
+
+[`android/`](../../android/README.md) is a Kotlin/AndroidX Views client of the existing API, following [ADR-0010](../decisions/ADR-0010-native-android-client.md). Native login, catalog, detail, settings and reader controls use a central HTTP repository. Readium handles EPUB publications and Android PdfRenderer handles local PDF files behind adapters. The application does not load the Litera website; internal EPUB rendering belongs to the publication engine.
+
+Server authorization, file identity/revision and format-aware progress remain shared contracts. Session persistence uses Android Keystore encryption; native files are private and scoped by origin/account/revision. Native cache is distinct from browser storage and does not imply PWA offline/outbox parity. See [architecture](../../android/docs/architecture.md), [security](../../android/docs/security.md) and [validation](../../android/docs/testing.md).

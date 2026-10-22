@@ -90,3 +90,11 @@ Use semantic HTML, visible focus, keyboard navigation, sufficient contrast, acce
 ## Anti-drift rule
 
 Before creating a visual component, search this foundation and the existing codebase for an equivalent. Reuse or extend it when semantically correct. Do not add arbitrary colors, radii, shadows, spacing scales, form patterns, modal behavior, or feedback patterns without a documented semantic reason.
+
+## Android native interface and shared visual tokens
+
+The [Android client](../../android/README.md) follows [ADR-0010](../decisions/ADR-0010-native-android-client.md), with Kotlin Views for application screens and native reader controls. [`src/web/styles.css`](../../src/web/styles.css) remains the reference for semantic colors/spacing/type. Native resources mirror those tokens with explicit light/dark/sepia roles; changes update both sources. Platform accessibility dimensions and system insets follow Android conventions where required.
+
+Use shared native primitives for forms, cards, errors/retry and navigation rather than an independent design language. Paint behind system bars, apply cutout/IME insets and maintain icon contrast. Reader controls expose only supported engine capabilities. The adaptive launcher icon preserves the Litera symbol inside the safe area, with separate background/foreground and monochrome layer; a cropped web icon is not an acceptable substitute.
+
+Appearance is native state, not a JavaScript bridge polling the site. Web/PWA and legacy remain independent clients. Changes to native presentation boundaries update Android architecture/security/testing docs; physical-device evidence remains separate from APK assembly.

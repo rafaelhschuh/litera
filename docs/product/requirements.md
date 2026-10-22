@@ -82,6 +82,22 @@ A documented Docker Compose deployment must provide persistent configuration, ca
 ### FR-012 — Future client compatibility
 The domain/API boundaries must allow a future Android client without coupling reading progress to browser-only state.
 
+### FR-013 — Native Android client over the shared API
+
+Litera provides a Kotlin Android client with native screens and reading controls. It reuses server API, authorization, file identity and format-aware progress semantics; FR-012 remains the shared architectural requirement. The app must not host the Litera website as its application interface.
+
+**Acceptance criteria**
+
+- Configure a self-hosted origin, sign in through a native form, browse/search the catalog, open details and read EPUB/PDF using the real API.
+- Use mature publication engines behind adapters: Readium for EPUB and Android PdfRenderer for PDF. Internal EPUB HTML rendering is limited to publication content. Only implemented capabilities are offered; PDF Adaptado/web feature parity is not assumed.
+- Preserve EPUB chapter/href and optional chapter progression, PDF page and expected revision. Restore location across lifecycle changes and handle conflicts explicitly, without percentage-based conflict resolution.
+- HTTPS is default, HTTP requires consent and invalid certificates fail. Session persistence is encrypted with Android Keystore and isolated by origin; redirects and publication content never receive credentials outside the API boundary. Follow [ADR-0010](../decisions/ADR-0010-native-android-client.md).
+- Native Back, system bars, camera-cutout/keyboard insets and accessible controls work together; keeping the screen awake applies only during active foreground reading. Adaptive/themed launcher icons preserve Litera identity without clipping.
+- Network/authentication errors offer contextual retry/configuration/login rather than a blank screen. Arbitrary native intents and privileged publication bridges are unavailable.
+- Chrome/PWA and APK storage are separate. Native publication cache is atomic and scoped by origin/account/book revision. Full offline catalog, persistent outbox and background sync require their own implementation/evidence; a cached file alone must not be advertised as full offline support.
+- CI produces an installable debug preview APK with checksum/reports independently of web/container release. Version derives from the root package; stable signing secrets remain outside the repository.
+- Unit, emulator, real-server and [physical-device evidence](../../android/docs/testing.md) are distinct. Successful APK assembly does not establish reader, isolation or offline acceptance.
+
 ## Non-functional requirements
 
 ### NFR-001 — Performance

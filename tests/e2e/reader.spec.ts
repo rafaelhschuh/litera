@@ -363,3 +363,35 @@ test('PDF original and adapted modes use the same themed controls', async ({ pag
   await expect(page.locator('.pdf-canvas').first()).toBeVisible()
   await expect(color).toHaveAttribute('content', '#121211')
 })
+
+test('web restores native EPUB chapter progression without a browser element locator', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Usuário', { exact: true }).fill('admin')
+  await page.getByLabel('Senha', { exact: true }).fill('test-password-strong-123')
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await page.waitForURL('/')
+  const books = (await (await page.request.get('/api/v1/books?q=A%20Ilha%20de%20Teste')).json()).books
+  const book = books.find((item: { title: string }) => item.title === 'A Ilha de Teste')
+  expect(book).toBeTruthy()
+  const endpoint = `/api/v1/books/${book.id}/progress`
+  const saved = (await (await page.request.get(endpoint)).json()).progress
+  const locator = { type: 'epub-cfi', cfi: 'epubcfi(/6/4)', chapterHref: 'chapter-2.xhtml', chapterProgression: .63 }
+  const response = await page.request.put(endpoint, { data: { format: 'epub', locator, progressRatio: .815, revision: saved?.revision ?? 0 } })
+  expect(response.ok()).toBe(true)
+  expect((await (await page.request.get(endpoint)).json()).progress.locator).toEqual(locator)
+  await page.goto(`/read/${book.id}`)
+  await expect(active(page).locator('.reader-document')).toContainText('Conteúdo real do segundo capítulo.')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  // This checks within-chapter position, independent from the overall ratio.
+  await expect.poll(async () => active(page).locator('body').evaluate(() => {
+    const maximum = document.documentElement.scrollHeight - innerHeight
+    return maximum > 0 ? Math.abs(scrollY / maximum - .63) : 1
+  })).toBeLessThan(.01)
+  await page.reload()
+  await expect(active(page).locator('.reader-document')).toContainText('Conteúdo real do segundo capítulo.')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await expect.poll(async () => active(page).locator('body').evaluate(() => {
+    const maximum = document.documentElement.scrollHeight - innerHeight
+    return maximum > 0 ? Math.abs(scrollY / maximum - .63) : 1
+  })).toBeLessThan(.01)
+})

@@ -1,0 +1,15 @@
+.gradle/
+.kotlin/
+.idea/
+**/build/
+local.properties
+captures/
+*.iml
+*.jks
+*.keystore
+
+# Kotlin data-layer source is not the runtime data/ directory ignored at root.
+!app/src/main/java/**/data/
+!app/src/main/java/**/data/**
+!app/src/test/java/**/data/
+!app/src/test/java/**/data/**

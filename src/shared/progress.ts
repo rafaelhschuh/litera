@@ -4,6 +4,7 @@ export type EpubLocator = {
   type: 'epub-cfi'
   cfi: string
   chapterHref?: string
+  chapterProgression?: number
   elementIndex?: number
   offset?: number
 }
@@ -21,7 +22,8 @@ export function normalizeProgress(format: BookFormat, locator: ReadingLocator, r
   const progressRatio = Math.min(1, Math.max(0, Number.isFinite(ratio) ? ratio : 0))
   if (format === 'epub') {
     if (locator.type !== 'epub-cfi' || !locator.cfi.trim()) throw new Error('EPUB progress requires a CFI locator')
-    return { locator: { ...locator, cfi: locator.cfi.trim() }, progressRatio }
+    if (locator.chapterProgression !== undefined && (typeof locator.chapterProgression !== 'number' || !Number.isFinite(locator.chapterProgression))) throw new Error('EPUB chapter progression must be finite')
+    return { locator: { ...locator, cfi: locator.cfi.trim(), ...(locator.chapterProgression !== undefined ? { chapterProgression: Math.min(1, Math.max(0, locator.chapterProgression)) } : {}) }, progressRatio }
   }
   if (locator.type !== 'pdf-page' && locator.type !== 'pdf-reflow') throw new Error('PDF progress requires a page locator')
   const maximum = Math.max(1, pageCount ?? Number.MAX_SAFE_INTEGER)

@@ -97,6 +97,16 @@ Uma sessão expirada exige novo login, sem apagar automaticamente a fila pendent
 
 O `/legacy` continua online. Administração exige conexão. Pacotes antigos da 0.4 devem ser salvos novamente para receber o conjunto completo da 0.5. Consulte [`ADR-0009`](docs/decisions/ADR-0009-offline-packages-and-outbox.md) e o [checklist de validação offline](docs/development/offline-validation.md). Testes Playwright Chromium/WebKit não substituem validação física em Safari/PWA.
 
+## Aplicativo Android nativo (APK)
+
+O subprojeto [`android/`](android/README.md) implementa um cliente Kotlin com telas nativas para configurar servidor, entrar, navegar no catálogo e ler. Reutiliza a API, autorização e semântica de progresso do Litera; o servidor Docker continua necessário. A leitura integra Readium para EPUB e Android PdfRenderer para PDF. O aplicativo não hospeda o site; o renderer interno do EPUB interpreta somente a publicação. Recursos web avançados, como PDF Adaptado, não são automaticamente capacidades Android.
+
+O workflow [Android](.github/workflows/android.yml) gera APK de **preview** nos artifacts, com assinatura debug efêmera, checksum e relatórios. Não publica APK estável nem anexa automaticamente à GitHub Release. Instalações de artifacts diferentes podem exigir reinstalação; sincronize pendências antes de remover dados. Versão acompanha package.json, sem numeração Android independente; preview usa application ID io.github.rafaelhschuh.litera.debug.
+
+Requer Android 9/API 28+. Sessão e arquivos privados são independentes do Chrome/PWA; login/downloads precisam ser feitos novamente. HTTPS válido é recomendado; HTTP LAN exige consentimento explícito. Cache de publicações por origem/conta/revisão não equivale a catálogo offline, outbox ou sincronização em background. Validação em aparelho físico é um gate explícito, sem ser presumida pelo build.
+
+Consulte [arquitetura](android/docs/architecture.md), [segurança](android/docs/security.md), [build/distribuição](android/docs/build-and-release.md), [checklist de validação](android/docs/testing.md), [contrato para agentes](android/AGENTS.md) e [ADR-0010](docs/decisions/ADR-0010-native-android-client.md).
+
 ## Metadata opcional
 
 Metadados embarcados são sempre a fonte inicial. O provider Open Library é opcional e vem desativado. Ele pode ser configurado sem restart em **Administração → Metadata**. Para fornecer o default de uma instalação/upgrade por ambiente, configure:

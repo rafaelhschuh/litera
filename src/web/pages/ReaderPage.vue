@@ -146,7 +146,7 @@ function epubPosition(document: Document) {
   epubAtStart.value = scrollY <= 2; epubAtEnd.value = scrollY >= max - 2
   const within = Math.min(1, Math.max(0, scrollY / max)), count = Math.max(1, toc.value.length), chapter = toc.value[currentChapter.value]
   const item = items[index]
-  const locator: EpubLocator = { type: 'epub-cfi', cfi: `epubcfi(/6/${(currentChapter.value + 1) * 2}!/4/${(index + 1) * 2})`, chapterHref: chapter?.href, elementIndex: index, offset: item ? Math.round(-item.getBoundingClientRect().top) : 0 }
+  const locator: EpubLocator = { type: 'epub-cfi', cfi: `epubcfi(/6/${(currentChapter.value + 1) * 2}!/4/${(index + 1) * 2})`, chapterHref: chapter?.href, chapterProgression: within, elementIndex: index, offset: item ? Math.round(-item.getBoundingClientRect().top) : 0 }
   return { locator, ratio: Math.min(1, (currentChapter.value + within) / count) }
 }
 function captureEpub(document = frame.value?.contentDocument ?? undefined, save = true) {
@@ -157,11 +157,16 @@ function captureEpub(document = frame.value?.contentDocument ?? undefined, save 
 function restoreEpub(document: Document, locator?: EpubLocator) {
   if (locator) {
     log('progress-restore', { locator })
-    const items = elements(document), cfiIndex = Number(locator.cfi.match(/!\/4\/(\d+)/)?.[1])
-    const index = Number.isInteger(locator.elementIndex) ? locator.elementIndex! : Number.isFinite(cfiIndex) ? Math.max(0, Math.floor(cfiIndex / 2) - 1) : 0
-    const target = items[Math.min(items.length - 1, Math.max(0, index))]
-    if (index === 0 && !locator.offset) document.defaultView?.scrollTo(0, 0)
-    else { target?.scrollIntoView({ block: 'start' }); document.defaultView?.scrollBy(0, locator.offset ?? 0) }
+    if (locator.chapterProgression !== undefined && locator.elementIndex === undefined) {
+      const height = document.defaultView?.innerHeight ?? 1
+      document.defaultView?.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - height) * Math.min(1, Math.max(0, locator.chapterProgression)))
+    } else {
+      const items = elements(document), cfiIndex = Number(locator.cfi.match(/!\/4\/(\d+)/)?.[1])
+      const index = Number.isInteger(locator.elementIndex) ? locator.elementIndex! : Number.isFinite(cfiIndex) ? Math.max(0, Math.floor(cfiIndex / 2) - 1) : 0
+      const target = items[Math.min(items.length - 1, Math.max(0, index))]
+      if (index === 0 && !locator.offset) document.defaultView?.scrollTo(0, 0)
+      else { target?.scrollIntoView({ block: 'start' }); document.defaultView?.scrollBy(0, locator.offset ?? 0) }
+    }
   }
   if (pendingChapterEnd) document.defaultView?.scrollTo(0, document.documentElement.scrollHeight)
   if (pendingAnchor) { document.getElementById(decodeURIComponent(pendingAnchor))?.scrollIntoView({ block: 'start' }); pendingAnchor = '' }

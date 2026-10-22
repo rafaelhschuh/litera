@@ -108,6 +108,9 @@ async function ready(page: Page) {
 }
 
 async function epubChapter(page: Page, chapter: number) {
+  // Updating another tab can outlast the reader's auto-hide delay. Reveal the
+  // controls through their supported keyboard interaction before opening TOC.
+  if (!await page.getByRole('button', { name: 'Abrir sumário', exact: true }).isVisible()) await page.keyboard.press('Tab')
   await page.getByRole('button', { name: 'Abrir sumário', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: `Capítulo ${chapter}`, exact: true }).click()
   await expect(active(page).locator('h1')).toHaveText(chapter === 1 ? 'Chegada' : 'Travessia')

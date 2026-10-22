@@ -19,3 +19,6 @@ npm-debug.log*
 test-results
 playwright-report
 .codex-local
+
+# Android companion builds independently from the server image.
+android

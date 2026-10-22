@@ -1,0 +1,12 @@
+<resources>
+    <item name="server_url" type="id" />
+    <item name="allow_http" type="id" />
+    <item name="server_connect" type="id" />
+    <item name="username" type="id" />
+    <item name="password" type="id" />
+    <item name="login_submit" type="id" />
+    <item name="book_list" type="id" />
+    <item name="reader_container" type="id" />
+    <item name="reader_location" type="id" />
+    <item name="reader_next" type="id" />
+</resources>

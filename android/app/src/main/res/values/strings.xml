@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="pt">
+    <string name="app_name">Litera</string>
+    <string name="server_title">Sua biblioteca, no Android</string>
+    <string name="server_url">Endereço do servidor</string>
+    <string name="server_hint">https://biblioteca.exemplo.com</string>
+    <string name="server_connect">Conectar à biblioteca</string>
+    <string name="cancel">Cancelar</string>
+    <string name="http_opt_in">Permitir HTTP para este servidor</string>
+    <string name="change_server_note">Sincronize alterações pendentes antes de trocar o servidor. Os dados locais de cada endereço serão preservados; voltar ao mesmo endereço recupera seu perfil.</string>
+    <string name="invalid_url">Informe uma URL HTTP(S) válida, sem usuário ou senha.</string>
+    <string name="menu_server">Servidor</string>
+    <string name="menu_reload">Recarregar</string>
+    <string name="retry">Tentar novamente</string>
+</resources>

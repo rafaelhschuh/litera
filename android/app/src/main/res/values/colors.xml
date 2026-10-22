@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrored from src/web/styles.css. See the frontend foundation before changing. -->
+    <color name="litera_background">#f5f4f1</color>
+    <color name="litera_surface">#fbfaf8</color>
+    <color name="litera_text">#272522</color>
+    <color name="litera_muted">#68645e</color>
+    <color name="litera_accent">#74394b</color>
+    <color name="litera_dark">#191918</color>
+    <color name="litera_cover_paper">#f2eee8</color>
+    <color name="litera_cover_accent">#c27b90</color>
+    <color name="litera_accent_soft">#f0e4e7</color>
+    <color name="litera_on_accent">#fffaf9</color>
+    <color name="litera_danger">#a04444</color>
+    <!-- Reader paper roles mirror the web reader palette, independent of app theme. -->
+    <color name="reader_paper_light">#fffefb</color>
+    <color name="reader_ink_light">#272520</color>
+    <color name="reader_paper_sepia">#f4ead6</color>
+    <color name="reader_ink_sepia">#302a21</color>
+    <color name="reader_paper_dark">#20201e</color>
+    <color name="reader_ink_dark">#eeeeea</color>
+</resources>
