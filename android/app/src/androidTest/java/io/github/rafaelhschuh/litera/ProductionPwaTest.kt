@@ -65,7 +65,35 @@ class ProductionPwaTest {
             host.js(scenario,"Array.from(document.querySelectorAll('button')).find(button=>button.textContent.includes('Ajustes do Android')).click()")
             androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.host_awake))
                 .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+            androidx.test.espresso.Espresso.pressBack()
+            for(bookId in listOf(epubId,pdfId)) {
+                host.js(scenario,"location.href='/books/$bookId'")
+                host.await("Offline download action did not appear",30_000) { host.js(scenario,"Array.from(document.querySelectorAll('button')).some(button=>button.textContent.includes('Salvar para offline') && !button.disabled)") == "true" }
+                host.js(scenario,"Array.from(document.querySelectorAll('button')).find(button=>button.textContent.includes('Salvar para offline')).click()")
+                host.await("Real offline package was not completed",90_000) { host.string(scenario,"document.body.innerText").contains("Disponível offline.") }
+            }
+            // Block HTTP in both render and worker networks, not just navigator.onLine.
+            // Deep reloads must now come from the actual PWA shell and IndexedDB packages.
+            blockNetwork(scenario,true)
+            try {
+                host.js(scenario,"location.href='/read/$epubId'")
+                host.await("Downloaded EPUB did not survive offline deep reload",45_000) { host.string(scenario,"document.querySelector('.epub-stage:not(.epub-stage--preparing)')?.contentDocument?.body?.innerText || ''").contains("Conteúdo real") }
+                host.screenshot("pwa-webview-epub-offline")
+                host.js(scenario,"location.href='/read/$pdfId'")
+                host.await("Downloaded PDF did not survive offline deep reload",60_000) { host.js(scenario,"Boolean(document.querySelector('.pdf-canvas')?.width > 0)") == "true" && host.string(scenario,"document.querySelector('.reader-stage')?.getAttribute('aria-busy')") == "false" }
+                host.screenshot("pwa-webview-pdf-offline")
+            } finally { blockNetwork(scenario,false) }
             scenario.onActivity { assertNotNull(it.findViewById<WebView>(R.id.host_webview)) }
+        }
+    }
+
+    private fun blockNetwork(scenario: ActivityScenario<MainActivity>,blocked: Boolean) {
+        scenario.onActivity { activity ->
+            val view = activity.findViewById<WebView>(R.id.host_webview)
+            view.settings.blockNetworkLoads = blocked
+            if(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.MULTI_PROFILE)) {
+                androidx.webkit.WebViewCompat.getProfile(view).serviceWorkerController.serviceWorkerWebSettings.blockNetworkLoads = blocked
+            }
         }
     }
 

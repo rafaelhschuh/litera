@@ -134,7 +134,8 @@ class MainActivity : AppCompatActivity() {
         // Profile must precede every setting, script, cookie operation or navigation.
         if(WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
             WebViewCompat.setProfile(view,value.profileName)
-            web = view; val profile = WebViewCompat.getProfile(view)
+            web = view
+            val profile = WebViewCompat.getProfile(view)
             cookies = profile.cookieManager
             view.id = R.id.host_webview
             view.settings.apply {
@@ -146,11 +147,12 @@ class MainActivity : AppCompatActivity() {
                 mediaPlaybackRequiresUserGesture = true
                 cacheMode = WebSettings.LOAD_DEFAULT
                 userAgentString += " LiteraAndroid/${BuildConfig.VERSION_NAME}"
-        }
-        cookies?.setAcceptThirdPartyCookies(view,false)
-        profile.serviceWorkerController.setServiceWorkerClient(object : ServiceWorkerClient() {
-            override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = if(value.owns(request.url.toString())) null else blockedResource()
-        })
+            }
+            cookies?.setAcceptThirdPartyCookies(view,false)
+            profile.serviceWorkerController.setServiceWorkerClient(object : ServiceWorkerClient() {
+                override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
+                    if(value.owns(request.url.toString())) null else blockedResource()
+            })
         }
         if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(view,"LiteraAndroid",setOf(value.value)) { source,message,sourceOrigin,isMainFrame,_ ->
@@ -159,8 +161,8 @@ class MainActivity : AppCompatActivity() {
                 val data = message.data ?: return@addWebMessageListener
                 if(data.length > 512) return@addWebMessageListener
                 HostState.parse(data)?.let { applyAppearance(it); return@addWebMessageListener }
-                if(runCatching { JSONObject(data).optString("type") }.getOrNull() == "settings") settings()
-        }
+                if(foreground && runCatching { JSONObject(data).optString("type") }.getOrNull() == "settings") settings()
+            }
         }
         view.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -283,7 +285,9 @@ class MainActivity : AppCompatActivity() {
         current.evaluateJavascript(HostScripts.back) { result ->
             if(current !== web || isFinishing || isDestroyed || result == "\"handled\"") return@evaluateJavascript
             pausePage()
-            if(current.canGoBack()) current.goBack()
+            // Native goBack may skip SPA entries without transient activation.
+            // The trusted PWA owns its history and receives its normal popstate.
+            if(current.canGoBack()) current.evaluateJavascript("history.back();",null)
             else if(appearance?.reader == true) current.loadUrl(origin!!.value + "/library")
             else finish()
         }
