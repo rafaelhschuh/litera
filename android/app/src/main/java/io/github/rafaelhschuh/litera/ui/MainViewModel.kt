@@ -52,7 +52,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun connect(value: ServerOrigin) {
         origin = value
         local.edit { putString("origin",value.value); putBoolean("allow-http",value.scheme == "http") }
-        repository = LiteraRepository(getApplication(), value)
+        repository = LiteraRepository.forOrigin(getApplication(), value)
         launch("session") { repo ->
             val user = repo.session()
             val prefs = repo.preferences()

@@ -1,5 +1,7 @@
 package io.github.rafaelhschuh.litera
 
+import io.github.rafaelhschuh.litera.data.LiteraRepository
+import kotlinx.coroutines.runBlocking
 import android.os.SystemClock
 import android.widget.EditText
 import android.view.View
@@ -134,8 +136,13 @@ class NativeHostTest {
             scenario.recreate()
             awaitCatalog()
         }
-        // A new Activity/ViewModel must read the persisted encrypted session;
-        // recreation alone intentionally retains the existing ViewModel.
+        // A separate client proves encrypted disk hydration, independent of the
+        // process-wide repository shared by production screens.
+        val canonical = ServerOrigin.parse(origin,true)
+        val shared = LiteraRepository.forOrigin(instrumentation.targetContext,canonical)
+        assertSame(shared,LiteraRepository.forOrigin(instrumentation.targetContext,ServerOrigin.parse(origin + "/",true)))
+        val fresh = LiteraRepository(instrumentation.targetContext,canonical)
+        assertEquals(shared.user?.id,runBlocking { fresh.session() }.id)
         val previousSessionChecks = requests.count { it.path == "/api/v1/auth/me" }
         ActivityScenario.launch(MainActivity::class.java).use {
             awaitCatalog()

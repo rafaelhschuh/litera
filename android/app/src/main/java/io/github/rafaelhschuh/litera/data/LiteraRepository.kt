@@ -17,11 +17,12 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 /** Native client of the existing API. All network/disk work runs on Dispatchers.IO. */
 // KTX edit cannot report commit failures; durable state requires that result.
 @SuppressLint("UseKtx")
-class LiteraRepository(context: Context, private val origin: ServerOrigin) {
+class LiteraRepository internal constructor(context: Context, private val origin: ServerOrigin) {
     private val preferences = context.getSharedPreferences("litera-native-${origin.profileName}", Context.MODE_PRIVATE)
     private val root = File(context.filesDir, "native-books/${origin.profileName}")
     private val cookies = EncryptedCookieJar(context.applicationContext, origin)
@@ -242,7 +243,9 @@ class LiteraRepository(context: Context, private val origin: ServerOrigin) {
     private suspend fun <T> io(action: suspend () -> T): T = withContext(Dispatchers.IO) {
         val generation = identityGeneration
         try { action() } catch (error: ApiFailure) {
-            if (error.status == 401 && identityGeneration == generation) { cookies.clear(); setUser(null) }
+            if (error.status == 401) synchronized(this@LiteraRepository) {
+                if (identityGeneration == generation) { cookies.clear(); setUser(null) }
+            }
             throw error
         }
     }
@@ -250,6 +253,11 @@ class LiteraRepository(context: Context, private val origin: ServerOrigin) {
     private fun validId(id: Int): Int { require(id > 0); return id }
 
     companion object {
+        private val instances = ConcurrentHashMap<String, LiteraRepository>()
+        /** One session and progress writer per canonical server, shared by all screens. */
+        fun forOrigin(context: Context, origin: ServerOrigin): LiteraRepository =
+            instances.computeIfAbsent(origin.value) { LiteraRepository(context.applicationContext, origin) }
+
         private const val MAX_BOOK_BYTES = 512L * 1024 * 1024
         internal fun parseUser(value: JSONObject) = NativeUser(value.getInt("id"), value.getString("username"), value.getString("displayName"), value.getString("role"))
         internal fun parseBook(value: JSONObject) = NativeBook(value.getInt("id"), value.getString("title"), value.nullableString("author"), value.nullableString("description"), value.getString("format"), if (value.isNull("pageCount")) null else value.getInt("pageCount"), value.optBoolean("hasCover"), value.optBoolean("favorite"), if (value.isNull("progressRatio")) null else value.getDouble("progressRatio"), value.getString("fileRevision"), value.optBoolean("completed"))

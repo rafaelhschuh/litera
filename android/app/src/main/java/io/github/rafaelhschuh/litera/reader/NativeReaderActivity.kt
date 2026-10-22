@@ -48,6 +48,8 @@ class NativeReaderActivity : AppCompatActivity() {
     private var openJob: Job? = null
     private var conflict = false
     private var changingPosition = false
+    private var owner: Int? = null
+    private fun ownsSession() = owner != null && repository.user?.id == owner
     private var ready = false
     private var awake = true
     private val padding get() = resources.getDimensionPixelSize(R.dimen.space_4)
@@ -61,7 +63,7 @@ class NativeReaderActivity : AppCompatActivity() {
         val origin = runCatching { ServerOrigin.parse(intent.getStringExtra("server-origin").orEmpty(),true) }.getOrNull()
         val id = intent.getIntExtra("book-id",0)
         if(origin == null || id <= 0) { Toast.makeText(this,R.string.reader_invalid,Toast.LENGTH_LONG).show(); finish(); return }
-        repository = LiteraRepository(applicationContext,origin)
+        repository = LiteraRepository.forOrigin(applicationContext,origin)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(ContextCompat.getColor(this@NativeReaderActivity,R.color.litera_background)) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view,insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -94,7 +96,7 @@ class NativeReaderActivity : AppCompatActivity() {
         openJob?.cancel()
         openJob = lifecycleScope.launch {
             try {
-                repository.session()
+                owner = repository.session().id
                 book = repository.book(id)
                 prefs = repository.preferences()
                 palette(prefs)
@@ -139,6 +141,7 @@ class NativeReaderActivity : AppCompatActivity() {
         }
         val current = book ?: return
         val file = repository.content(current)
+        if(!ownsSession()) { finish(); return }
         toolbar.title = current.title
         engine = if(current.format == "epub") {
             EpubReaderEngine.open(this,container.id,file,repository.chapters(current.id),position,prefs,::positionChanged,::readerError)
@@ -154,7 +157,7 @@ class NativeReaderActivity : AppCompatActivity() {
     }
     private fun positionChanged(position: ReaderPosition) {
         location.text = position.label
-        if(!ready || changingPosition) return
+        if(!ready || changingPosition || !ownsSession()) return
         val current = book ?: return
         try { repository.stageProgress(current,position.locator,position.ratio,remote?.revision) }
         catch(error: Exception) { readerError(error.message ?: getString(R.string.reader_error)); return }
@@ -163,6 +166,7 @@ class NativeReaderActivity : AppCompatActivity() {
         saveJob = lifecycleScope.launch { delay(800); flush() }
     }
     private suspend fun flush() {
+        if(!ownsSession()) { finish(); return }
         val current = book ?: return
         try {
             repository.flushProgress(current.id)?.let { remote = it }
@@ -276,9 +280,13 @@ class NativeReaderActivity : AppCompatActivity() {
         if(awake && ready && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
-    override fun onResume() { super.onResume(); if(::root.isInitialized) updateAwake() }
+    override fun onResume() {
+        super.onResume()
+        if(owner != null && !ownsSession()) { finish(); return }
+        if(::root.isInitialized) updateAwake()
+    }
     override fun onPause() {
-        if(ready && !changingPosition && ::repository.isInitialized) engine?.position()?.let { position ->
+        if(ready && !changingPosition && ::repository.isInitialized && ownsSession()) engine?.position()?.let { position ->
             try {
                 book?.let { repository.stageProgress(it,position.locator,position.ratio,remote?.revision) }
                 if(!conflict) {
