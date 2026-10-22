@@ -94,7 +94,13 @@ class PdfReaderEngine(
         }
     }
 
-    override fun preferences(value: NativePreferences) { pageView.invert = value.pdfInvert }
+    override fun preferences(value: NativePreferences) {
+        pageView.invert = value.pdfInvert
+        val paper = when { value.pdfInvert || value.theme == "dark" -> io.github.rafaelhschuh.litera.R.color.reader_paper_dark
+            value.theme == "sepia" -> io.github.rafaelhschuh.litera.R.color.reader_paper_sepia
+            else -> io.github.rafaelhschuh.litera.R.color.reader_paper_light }
+        pageView.setBackgroundColor(androidx.core.content.ContextCompat.getColor(activity,paper))
+    }
     override fun close() {
         job?.cancel()
         synchronized(renderer) { if (!closed) { closed = true; renderer.close() } }

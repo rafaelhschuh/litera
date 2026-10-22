@@ -129,6 +129,7 @@ class NativeHostTest {
             onView(withId(R.id.password)).perform(replaceText("fixture-password"), closeSoftKeyboard())
             onView(withId(R.id.login_submit)).perform(click())
             awaitCatalog()
+            screenshot("catalog")
             val login = requests.first { it.path == "/api/v1/auth/login" }
             assertEquals("POST", login.method)
             assertEquals("fixture-reader", JSONObject(login.body).getString("username"))
@@ -205,6 +206,7 @@ class NativeHostTest {
             }
             onView(withId(R.id.reader_next)).perform(click())
             await { requests.any { request -> request.method == "PUT" && request.path.endsWith("/progress") && JSONObject(request.body).getJSONObject("locator").optString("chapterHref") == "chapter-2.xhtml" } }
+            screenshot("epub-dark")
             val saved = JSONObject(requests.last { request -> request.method == "PUT" && request.path.endsWith("/progress") }.body).getJSONObject("locator")
             assertEquals("epub-cfi",saved.getString("type"))
             assertTrue(saved.getDouble("chapterProgression").isFinite())
@@ -229,10 +231,18 @@ class NativeHostTest {
             onView(withId(R.id.reader_next)).perform(click())
             await { try { onView(withId(R.id.reader_location)).check(matches(withText("Página 2 de 2"))); true } catch(_: AssertionError) { false } }
             await { requests.any { request -> request.method == "PUT" && request.path.endsWith("/progress") && JSONObject(request.body).getJSONObject("locator").optInt("page") == 2 } }
+            screenshot("pdf-page-2")
             recreateReader()
             await { try { onView(withId(R.id.reader_location)).check(matches(withText("Página 2 de 2"))); true } catch(_: AssertionError) { false } }
 
         }
+    }
+
+    private fun screenshot(name: String) {
+        val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return
+        val folder = java.io.File(instrumentation.targetContext.getExternalFilesDir(null),"test-screenshots").apply { mkdirs() }
+        java.io.File(folder,"$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        bitmap.recycle()
     }
 
     private fun recreateReader() {
