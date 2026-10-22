@@ -57,6 +57,15 @@ class WebViewHostTest {
                 }
                 matched
             }
+            var statusHeight = 0
+            scenario.onActivity { activity ->
+                statusHeight = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                    ?.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars())?.top ?: 0
+            }
+            assertTrue("Status bar must be visible for its appearance check",statusHeight > 0)
+            val screenshot = host.instrumentation.uiAutomation.takeScreenshot()!!
+            assertEquals("The camera/status area must match the reading surface",Color.parseColor("#191D26"),screenshot.getPixel(screenshot.width/2,statusHeight/2))
+            screenshot.recycle()
             host.screenshot("webview-host-reader-dark")
             host.js(scenario,"const dialog=document.createElement('div');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.id='fixture-dialog';document.body.append(dialog);document.addEventListener('keydown',event=>{if(event.key==='Escape')dialog.remove();},{once:true})")
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }

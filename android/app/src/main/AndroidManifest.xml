@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Predictive Back applies on API 33+; older Android uses the AndroidX dispatcher. -->
     <application
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
+        tools:targetApi="33"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"

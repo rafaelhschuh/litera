@@ -9,6 +9,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Icon
+import androidx.core.graphics.drawable.toDrawable
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
@@ -177,6 +178,10 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onPageStarted(view: WebView,url: String?,icon: Bitmap?) { failed = false; hideError(); progress.visibility = View.VISIBLE }
             override fun onPageCommitVisible(view: WebView,url: String?) { observe() }
+            override fun doUpdateVisitedHistory(view: WebView,url: String?,isReload: Boolean) {
+                // The platform reports SPA URL changes; do not monkey-patch the PWA router.
+                if(url != null && value.owns(url)) view.post { if(view === web) { observe(); rememberPage() } }
+            }
             override fun onPageFinished(view: WebView,url: String?) {
                 progress.visibility = View.GONE
                 if(!failed && trustedTop()) { observe(); rememberPage() }
@@ -232,7 +237,12 @@ class MainActivity : AppCompatActivity() {
         if(value.owns(current) && !failed) local.edit { putString("page-${value.profileName}",current) }
     }
     private fun applyAppearance(state: HostState) {
-        appearance = state; root.setBackgroundColor(state.color); web?.setBackgroundColor(state.color)
+        appearance = state
+        // AppCompat can paint the window/decor outside the content's inset bounds.
+        // Keep all three backgrounds coherent, including the camera/status area.
+        window.setBackgroundDrawable(state.color.toDrawable())
+        window.decorView.setBackgroundColor(state.color)
+        root.setBackgroundColor(state.color); web?.setBackgroundColor(state.color)
         WindowInsetsControllerCompat(window,root).apply { isAppearanceLightStatusBars = !state.dark; isAppearanceLightNavigationBars = !state.dark }
         origin?.let { value -> local.edit { putInt("color-${value.profileName}",state.color); putBoolean("dark-${value.profileName}",state.dark) } }
         rememberPage(); updateAwake()
@@ -287,7 +297,7 @@ class MainActivity : AppCompatActivity() {
             pausePage()
             // Native goBack may skip SPA entries without transient activation.
             // The trusted PWA owns its history and receives its normal popstate.
-            if(current.canGoBack()) current.evaluateJavascript("history.back();",null)
+            if(result == "\"history\"" || (result == "\"native-history\"" && current.copyBackForwardList().currentIndex > 0)) current.evaluateJavascript("history.back();",null)
             else if(appearance?.reader == true) current.loadUrl(origin!!.value + "/library")
             else finish()
         }

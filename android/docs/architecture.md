@@ -35,7 +35,7 @@ O host observa estado de apresentação, sem acessar livros, sessão ou senha. `
 
 A aparência efetiva vem de `theme-color` e tokens CSS do aplicativo/reader. Troca de tema, PDF original/adaptado e saída da leitura atualizam barras e contraste sem recarregar a página. Insets nativos mantêm conteúdo fora da câmera/barras e acomodam o IME; não aplicar a mesma safe area duas vezes. Manter a tela acesa depende simultaneamente de Activity em foreground, reader ativo e preferência habilitada.
 
-Voltar resolve primeiro controles web/diálogos e fullscreen, depois router/histórico, e finalmente sai do host. A Activity não deve executar um retorno de histórico cegamente enquanto há modal aberto. URLs externas só saem com gesto e esquema HTTP(S) validado; não substituem a origem confiável da WebView.
+Voltar resolve primeiro controles web/diálogos e fullscreen, depois router/histórico, e finalmente sai do host. A Activity não deve executar um retorno de histórico cegamente enquanto há modal aberto. Na página confiável, `history.back()` preserva o fluxo SPA depois de resolver overlays; a API de retorno do browser pode pular entradas criadas sem ativação de usuário, conforme o [Chromium](https://chromium.googlesource.com/chromium/src/+/refs/tags/135.0.7049.0/docs/history_manipulation_intervention.md). O callback Android `doUpdateVisitedHistory` acompanha mudanças de rota, sem sobrescrever `pushState`/`replaceState` nem manter outro router. Janela, decor e conteúdo recebem a mesma cor para cobrir também a área da câmera fora dos bounds do conteúdo. URLs externas só saem com gesto e esquema HTTP(S) validado; não substituem a origem confiável da WebView.
 
 ## Progresso, pausa e offline
 

@@ -4,7 +4,7 @@ package io.github.rafaelhschuh.litera
 internal object HostScripts {
     val observe = """
         (() => {
-          if (window.top !== window || !window.LiteraAndroid) return;
+          if (window.top !== window || !window.LiteraAndroid || !document.head) return;
           if (window.__literaHostState) { window.__literaHostState(); return; }
           let pending = false, previous = '';
           const send = () => {
@@ -17,15 +17,11 @@ internal object HostScripts {
             if (state !== previous) { previous = state; window.LiteraAndroid.postMessage(state); }
           };
           const schedule = () => { if (!pending) { pending = true; requestAnimationFrame(send); } };
-          for (const name of ['pushState','replaceState']) {
-            const original = history[name];
-            history[name] = function(...args) { const result = original.apply(this,args); schedule(); return result; };
-          }
           new MutationObserver(schedule).observe(document.head,{childList:true,subtree:true,attributes:true,attributeFilter:['content','name']});
           new MutationObserver(schedule).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-reader-theme','style']});
           addEventListener('popstate',schedule);
           addEventListener('pageshow',schedule);
-          window.__literaHostState = send;
+          window.__literaHostState = schedule;
           schedule();
         })();
     """.trimIndent()
@@ -42,7 +38,13 @@ internal object HostScripts {
             return 'handled';
           }
           if (document.fullscreenElement) { document.exitFullscreen(); return 'handled'; }
-          return 'history';
+          // Vue Router records its predecessor, including restored SPA entries.
+          if (history.state && Object.prototype.hasOwnProperty.call(history.state,'back')) {
+            return history.state.back ? 'history' : 'root';
+          }
+          const entry = window.navigation?.currentEntry;
+          if (entry && Number.isInteger(entry.index)) return entry.index > 0 ? 'history' : 'root';
+          return 'native-history';
         })();
     """.trimIndent()
 }

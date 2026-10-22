@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 internal class WebViewHarness {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private var lastEvaluation = ""
     fun clearHostSettings() {
         val context = instrumentation.targetContext
         check(context.getSharedPreferences("litera-host",0).edit().clear().commit())
@@ -36,7 +37,7 @@ internal class WebViewHarness {
                 ?: completed.countDown()
         }
         check(completed.await(5,TimeUnit.SECONDS)) { "JavaScript callback timed out: $script" }
-        return result.get() ?: "null"
+        return (result.get() ?: "null").also { lastEvaluation = "${script.take(200)} => ${it.take(300)}" }
     }
     fun string(scenario: ActivityScenario<MainActivity>,script: String): String =
         JSONArray("[${js(scenario,script)}]").optString(0)
@@ -47,7 +48,7 @@ internal class WebViewHarness {
             try { if(condition()) return } catch(error: AssertionError) { failure = error }
             SystemClock.sleep(100)
         }
-        throw AssertionError(message,failure)
+        throw AssertionError("$message\nLast JavaScript: $lastEvaluation",failure)
     }
     fun screenshot(name: String) {
         val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: error("Device screenshot unavailable")
