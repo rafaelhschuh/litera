@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:locale="pt">
+    <string name="app_name">Litera</string>
+    <string name="server_title">Sua biblioteca, no Android</string>
+    <string name="server_url">Endereço do servidor</string>
+    <string name="server_hint">https://biblioteca.exemplo.com</string>
+    <string name="server_connect">Conectar à biblioteca</string>
+    <string name="cancel">Cancelar</string>
+    <string name="http_opt_in">Permitir HTTP para este servidor</string>
+    <string name="change_server_note">Sincronize alterações pendentes antes de trocar o servidor. Os dados locais de cada endereço serão preservados; voltar ao mesmo endereço recupera seu perfil.</string>
+    <string name="invalid_url">Informe uma URL HTTP(S) válida, sem usuário ou senha.</string>
+    <string name="menu_server">Servidor</string>
+    <string name="menu_reload">Recarregar</string>
+    <string name="retry">Tentar novamente</string>
+    <string name="server_note">Conecte o aplicativo ao seu Litera. Biblioteca, leitor e dados offline usam a experiência web completa, em um perfil privado deste aplicativo.</string>
+    <string name="http_note">HTTP expõe sua sessão e livros à rede. O modo offline completo requer HTTPS (ou localhost de desenvolvimento).</string>
+    <string name="host_settings">Ajustes do Android</string>
+    <string name="host_awake">Manter a tela acesa durante a leitura</string>
+    <string name="host_change_server">Trocar servidor</string>
+    <string name="host_open_browser">Abrir no navegador</string>
+    <string name="host_unavailable">Não foi possível abrir esta página. Verifique a conexão ou o endereço do servidor. Seus dados locais foram preservados.</string>
+    <string name="host_tls_error">O certificado HTTPS do servidor não é válido. Corrija o certificado para conectar com segurança.</string>
+    <string name="host_http_error">O servidor não conseguiu abrir esta página.</string>
+    <string name="host_download">Para manter livros neste aplicativo, use Salvar para offline na página do livro. Exportações de arquivos podem ser feitas pelo navegador.</string>
+    <string name="host_upgrade">Atualize o Android System WebView ou Chrome para usar perfis privados e a integração segura do Litera.</string>
+    <string name="host_update_webview">Atualizar WebView</string>
+    <string name="host_renderer_error">O conteúdo foi interrompido pelo Android. Toque em Tentar novamente para reabrir a última página salva.</string>
+    <string name="host_about">Litera %1$s • WebView %2$s</string>
+    <string name="host_settings_note">Seus dados deste app são independentes do Chrome. Trocar o servidor preserva o perfil anterior.</string>
+</resources>

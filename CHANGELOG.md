@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Novo subprojeto Android Kotlin com host WebView do Litera completo, reaproveitando interface, leitores e offline existentes.
+- Integração de barras/tema, insets/teclado, navegação Voltar, pausa e ícone adaptativo, com perfis WebView separados por origem e bridge restrita de apresentação.
+- Workflow adicional para APK debug e validação Android, sem alterar a versão 0.5.5 ou publicação web/container.
+- Contratos Android, ADR e documentação conectados à raiz. O preview nativo rejeitado não foi integrado; o novo PR WebView aguarda teste e autorização do usuário, sem merge.
+
 ## 0.5.5 — 2026-10-20
 
 - Sincronização automática de leitura passa a ser silenciosa, sem avisos de envio, contagem de pendências ou confirmação; erros e conflitos continuam acionáveis.

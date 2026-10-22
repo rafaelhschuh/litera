@@ -1,0 +1,7 @@
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Keep the background out of the foreground so launcher masks and
+         themed-icon tinting never crop a pre-rounded tile. Min SDK is 28. -->
+    <background android:drawable="@color/litera_dark" />
+    <foreground android:drawable="@drawable/ic_litera" />
+    <monochrome android:drawable="@drawable/ic_litera_monochrome" />
+</adaptive-icon>

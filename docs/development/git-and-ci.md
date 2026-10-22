@@ -34,3 +34,9 @@ Processo de release:
 git tag -a v0.5.5 -m "Litera 0.5.5"
 git push origin v0.5.5
 ```
+
+## Android preview
+
+O [workflow Android](../../.github/workflows/android.yml) é adicional e independente: testes unitários, lint, APK debug e instrumentação em emulador. Artifacts incluem APK, SHA-256 e relatórios; não publicam automaticamente em loja ou GitHub Release. Versão vem do package.json raiz, atualmente `0.5.5`; não alterar tags existentes para distribuir preview.
+
+Consulte [build/assinatura](../../android/docs/build-and-release.md) e [evidência Android](../../android/docs/testing.md). A chave debug do runner não fornece identidade estável entre execuções. O PR nativo anterior foi rejeitado sem merge; o novo PR WebView deve permanecer em draft, sem merge automático nem integração, até teste do APK e autorização expressa do usuário. Push de ajustes e geração de artifacts não equivalem a essa autorização.

@@ -407,3 +407,9 @@ O. O produto não depende de mocks/pendências marcadas no código/fake data em 
 
 Depois dos gates, faça uma última revisão como release engineer, security reviewer e usuário final. Corrija regressões encontradas. Gere um resumo final curto com: versão RC, comandos exatos de install/upgrade/test, migrations executadas, matriz de compatibilidade, checks de segurança, limitações conhecidas e lista objetiva do que impediria promover este RC para 1.0 final (idealmente nenhuma).
 ```
+
+## Subprojeto Android
+
+Antes de alterar o host ou sua integração web, ler [android/AGENTS.md](android/AGENTS.md), [README Android](android/README.md) e [ADR-0010](docs/decisions/ADR-0010-android-webview-host.md). Android hospeda a implementação web completa em WebView de primeiro nível; não duplicar catálogo, engines, autenticação ou outbox em Kotlin.
+
+O gate Android inclui origem/perfis, navegação/bridge, pausa/restauração, barras/insets/IME, offline real em origem segura, gates Android e regressões web pertinentes. Separar evidência de browser, emulador e aparelho físico no [checklist Android](android/docs/testing.md). A versão vem do package.json raiz. O novo PR permanece draft sem merge até o usuário testar o APK e autorizar expressamente; o PR nativo rejeitado não constitui aprovação.

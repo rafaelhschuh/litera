@@ -33,3 +33,9 @@ A work item is done only when:
 ## Release-stage rule
 
 Each Codex implementation stage (MVP, Beta, RC) must finish with a runnable integrated product. A stage is not complete if only one architectural layer is substantially implemented while another required layer remains scaffolding.
+
+## Android host gate
+
+Changes under `android/` or the shared host integration also follow [android/AGENTS.md](../../android/AGENTS.md), [ADR-0010](../decisions/ADR-0010-android-webview-host.md) and the [Android validation checklist](../../android/docs/testing.md). Verify origin/profile isolation, bounded appearance messaging, Back/overlays/fullscreen, pause/restoration, bars/cutout/IME and offline on a secure origin through the real shared web flow. Do not duplicate screens, engines or outbox in Kotlin.
+
+Run unit tests, lint, APK build, instrumentation and pertinent web gates. Record exact evidence separately for browser, emulator and physical device; prior native-preview results do not validate the WebView host. The new preview PR remains in draft without merge until the user tests its APK and expressly authorizes integration.

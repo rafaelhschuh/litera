@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Litera" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/litera_accent</item>
+        <item name="colorOnPrimary">@color/litera_on_accent</item>
+        <item name="colorSecondary">@color/litera_accent</item>
+        <item name="colorOnSecondary">@color/litera_on_accent</item>
+        <item name="colorPrimaryContainer">@color/litera_accent_soft</item>
+        <item name="colorOnPrimaryContainer">@color/litera_text</item>
+        <item name="colorSecondaryContainer">@color/litera_accent_soft</item>
+        <item name="colorOnSecondaryContainer">@color/litera_text</item>
+        <item name="colorSurfaceVariant">@color/litera_surface</item>
+        <item name="colorOnSurfaceVariant">@color/litera_muted</item>
+        <item name="colorOutline">@color/litera_muted</item>
+        <item name="colorError">@color/litera_danger</item>
+        <item name="colorSurface">@color/litera_surface</item>
+        <item name="colorSurfaceContainer">@color/litera_surface</item>
+        <item name="colorSurfaceContainerHigh">@color/litera_surface</item>
+        <item name="colorSurfaceContainerHighest">@color/litera_surface</item>
+        <item name="colorSurfaceContainerLow">@color/litera_background</item>
+        <item name="colorSurfaceContainerLowest">@color/litera_background</item>
+        <item name="colorSurfaceBright">@color/litera_surface</item>
+        <item name="colorSurfaceDim">@color/litera_background</item>
+        <item name="colorOnSurface">@color/litera_text</item>
+        <item name="android:colorBackground">@color/litera_background</item>
+        <item name="android:windowBackground">@color/litera_background</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>

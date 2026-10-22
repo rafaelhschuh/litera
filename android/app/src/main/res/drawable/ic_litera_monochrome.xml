@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Alpha-only artwork: Android 13+ supplies wallpaper/theme colors.
+         The transparent spine remains legible when both pages share a tint. -->
+    <group
+        android:scaleX="0.15972222"
+        android:scaleY="0.15972222"
+        android:translateX="13.111111"
+        android:translateY="13.111111">
+        <clip-path android:fillType="evenOdd"
+            android:pathData="M0,0H512V512H0Z M256,167a9,9 0,0 1,9 9v178a9,9 0,0 1,-18 0V176a9,9 0,0 1,9 -9Z" />
+        <path android:fillColor="@android:color/white"
+            android:pathData="M112,126h118c42,0 68,25 68,66v194c-17,-22 -41,-33 -72,-33H112V126Z" />
+        <path android:fillColor="@android:color/white"
+            android:pathData="M400,126H282c-42,0 -68,25 -68,66v194c17,-22 41,-33 72,-33h114V126Z" />
+    </group>
+</vector>
