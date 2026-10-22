@@ -2,6 +2,10 @@
 
 package io.github.rafaelhschuh.litera.reader
 
+import android.content.Context
+import androidx.core.content.ContextCompat
+import io.github.rafaelhschuh.litera.R
+import org.readium.r2.navigator.preferences.Color
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.withResumed
@@ -69,7 +73,7 @@ class EpubReaderEngine private constructor(
     override fun next() { fragment.goForward(animated = false) }
     override fun previous() { fragment.goBackward(animated = false) }
     override fun go(index: Int) { publication.readingOrder.getOrNull(index)?.let { fragment.go(it, false) } }
-    override fun preferences(value: NativePreferences) { fragment.submitPreferences(epubPreferences(value)) }
+    override fun preferences(value: NativePreferences) { fragment.submitPreferences(epubPreferences(activity,value)) }
     override fun close() {
         observer?.cancel()
         publication.close()
@@ -100,7 +104,7 @@ class EpubReaderEngine private constructor(
                     ?: previous?.let { (it.progressRatio * publication.readingOrder.size - index).coerceIn(0.0, 1.0) } ?: 0.0
                 val link = publication.readingOrder[index]
                 val initial = Locator(href = link.href.resolve(), mediaType = link.mediaType ?: MediaType.XHTML, locations = Locator.Locations(progression = progression.coerceIn(0.0, 1.0)))
-                val factory = EpubNavigatorFactory(publication).createFragmentFactory(initialLocator = initial, initialPreferences = epubPreferences(preferences), listener = object : EpubNavigatorFragment.Listener {
+                val factory = EpubNavigatorFactory(publication).createFragmentFactory(initialLocator = initial, initialPreferences = epubPreferences(activity,preferences), listener = object : EpubNavigatorFragment.Listener {
                     override fun onExternalLinkActivated(url: AbsoluteUrl) { onError(activity.getString(io.github.rafaelhschuh.litera.R.string.reader_link_blocked)) }
                     override fun onResourceLoadFailed(href: org.readium.r2.shared.util.Url, error: org.readium.r2.shared.util.data.ReadError) { onError(activity.getString(io.github.rafaelhschuh.litera.R.string.reader_resource_error)) }
                 }, configuration = EpubNavigatorFragment.Configuration(shouldApplyInsetsPadding = false))
@@ -113,7 +117,9 @@ class EpubReaderEngine private constructor(
             }
         }
 
-        private fun epubPreferences(prefs: NativePreferences) = EpubPreferences(
+        private fun epubPreferences(context: Context, prefs: NativePreferences) = EpubPreferences(
+            backgroundColor = Color(ContextCompat.getColor(context,when(prefs.theme) { "dark" -> R.color.reader_paper_dark; "sepia" -> R.color.reader_paper_sepia; else -> R.color.reader_paper_light })),
+            textColor = Color(ContextCompat.getColor(context,when(prefs.theme) { "dark" -> R.color.reader_ink_dark; "sepia" -> R.color.reader_ink_sepia; else -> R.color.reader_ink_light })),
             fontSize = prefs.fontScale / 100.0,
             lineHeight = when (prefs.lineHeight) { "compact" -> 1.4; "relaxed" -> 1.9; else -> 1.65 },
             pageMargins = when (prefs.margins) { "narrow" -> 0.5; "wide" -> 1.5; else -> 1.0 },

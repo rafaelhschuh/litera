@@ -205,6 +205,15 @@ class NativeHostTest {
                 assertEquals(androidx.core.content.ContextCompat.getColor(reader,R.color.reader_paper_dark),(nativeRoot.background as android.graphics.drawable.ColorDrawable).color)
                 assertFalse(androidx.core.view.WindowInsetsControllerCompat(reader.window,nativeRoot).isAppearanceLightStatusBars)
             }
+            val publicationPaper = AtomicReference("")
+            val expectedPaper = String.format(java.util.Locale.ROOT,"#%06X",0xFFFFFF and androidx.core.content.ContextCompat.getColor(instrumentation.targetContext,R.color.reader_paper_dark))
+            await {
+                instrumentation.runOnMainSync {
+                    val reader = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).filterIsInstance<NativeReaderActivity>().single()
+                    reader.findViewById<View>(R.id.reader_container).let(::webView)?.evaluateJavascript("getComputedStyle(document.documentElement).getPropertyValue('--USER__backgroundColor')") { value -> publicationPaper.set(value) }
+                }
+                publicationPaper.get().contains(expectedPaper,ignoreCase = true)
+            }
             onView(withId(R.id.reader_next)).perform(click())
             await { requests.any { request -> request.method == "PUT" && request.path.endsWith("/progress") && JSONObject(request.body).getJSONObject("locator").optString("chapterHref") == "chapter-2.xhtml" } }
             screenshot("epub-dark")

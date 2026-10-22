@@ -258,6 +258,7 @@ class MainActivity : AppCompatActivity() {
         val cover = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            setBackgroundColor(color(R.color.litera_dark))
             setImageResource(R.drawable.ic_litera)
         }
         content.addView(cover,LinearLayout.LayoutParams(-1,spacing * 15))
@@ -271,7 +272,7 @@ class MainActivity : AppCompatActivity() {
                     val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = maxOf(1,bounds.outWidth / 480,bounds.outHeight / 720) }
                     android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,options)
                 }
-                cover.setImageBitmap(bitmap)
+                if(bitmap != null) { cover.setBackgroundColor(color(R.color.litera_surface)); cover.setImageBitmap(bitmap) }
             } catch(cancelled: CancellationException) { throw cancelled }
             catch(_: Exception) { /* A cover failure does not block reading. */ }
         }

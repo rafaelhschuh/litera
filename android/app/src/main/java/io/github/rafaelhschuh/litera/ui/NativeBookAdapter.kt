@@ -66,6 +66,7 @@ class NativeBookAdapter(
         holder.title.text = book.title
         holder.author.text = book.author ?: holder.row.context.getString(R.string.native_unknown_author)
         holder.progress.text = book.progressRatio?.let { holder.row.context.getString(R.string.native_progress, (it * 100).toInt()) } ?: book.format.uppercase()
+        holder.cover.setBackgroundColor(ContextCompat.getColor(holder.cover.context,R.color.litera_dark))
         holder.cover.setImageResource(R.drawable.ic_litera)
         holder.row.setOnClickListener { open(book) }
         if (book.hasCover) holder.job = scope.launch {
@@ -78,7 +79,10 @@ class NativeBookAdapter(
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                 }
                 ensureActive()
-                holder.cover.setImageBitmap(bitmap)
+                if(bitmap != null) {
+                    holder.cover.setBackgroundColor(ContextCompat.getColor(holder.cover.context,R.color.litera_surface))
+                    holder.cover.setImageBitmap(bitmap)
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { /* The native placeholder keeps the library usable. */ }
         }
