@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
-import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
@@ -71,7 +70,9 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-            insets
+            // Root owns system/cutout/IME padding; Material bottom navigation
+            // must not apply those insets a second time.
+            WindowInsetsCompat.CONSUMED
         }
         toolbar = MaterialToolbar(this).apply { title = getString(R.string.app_name); setBackgroundColor(color(R.color.litera_surface)) }
         progress = LinearProgressIndicator(this).apply { isIndeterminate = true; visibility = View.INVISIBLE }

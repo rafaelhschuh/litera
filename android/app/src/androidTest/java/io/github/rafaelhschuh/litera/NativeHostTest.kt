@@ -19,6 +19,7 @@ import java.util.zip.CRC32
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
@@ -240,7 +241,9 @@ class NativeHostTest {
 
     private fun screenshot(name: String) {
         val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return
-        val folder = java.io.File(instrumentation.targetContext.getExternalFilesDir(null),"test-screenshots").apply { mkdirs() }
+        val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
+            ?: java.io.File(instrumentation.targetContext.getExternalFilesDir(null),"test-screenshots").path
+        val folder = java.io.File(output).apply { mkdirs() }
         java.io.File(folder,"$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         bitmap.recycle()
     }
@@ -260,7 +263,7 @@ class NativeHostTest {
         onView(withId(R.id.login_submit)).perform(click())
         awaitCatalog()
         onView(withText(BOOK_TITLE)).perform(click())
-        onView(withText(R.string.native_read)).perform(click())
+        onView(withText(R.string.native_read)).perform(scrollTo(),click())
     }
     private fun webView(view: View): WebView? {
         if(view is WebView) return view
