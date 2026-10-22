@@ -16,3 +16,4 @@ Este subprojeto herda o [AGENTS.md raiz](../AGENTS.md). Antes de alterar Android
 12. Versão vem do package.json raiz; nunca bump Android isolado. Não versionar keystore ou segredo de assinatura. APK debug de CI é preview, sem promessa de assinatura estável.
 13. Executar gates Android e web/API pertinentes. Separar evidência unitária, emulador e aparelho físico. Build de APK não valida UX, engines, restauração, offline ou isolamento.
 14. Mudanças em engine, contrato API/locator, rede, storage, assinatura e compatibilidade atualizam estes contratos, ADR e links na raiz. Não declarar estágio pronto com mock/TODO no fluxo principal; documentar limitações de paridade com web explicitamente.
+15. O PR deste preview nativo deve permanecer em draft e sem merge até o usuário testar o APK e autorizar a integração. CI aprovado não substitui esse teste e autorização.

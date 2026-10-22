@@ -55,14 +55,16 @@ Pendente até execução e registro. Não inferir os resultados abaixo de um bui
 |---|---|---|---|---|---|
 | A registrar | A registrar | A registrar | Readium / PdfRenderer | Ícone, barras, login, leitura, restauração e cache | Não validado em aparelho físico |
 
-## Evidência local — 2026-10-21
+## Evidência — 2026-10-22
 
-Workspace baseado em `8ecda20` (release web 0.5.5), com a implementação nativa deste subprojeto:
+Código Android no commit `674ac70`, baseado na release web 0.5.5 (`8ecda20`):
 
-- JDK 17, SDK/target 36, mínimo 28; `clean testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` aprovado com 21 unitários, sem falhas nem skips. Instrumentação compilada; `adb devices` não apresentou dispositivo/emulador, portanto **não executada localmente**.
-- `npm run verify` aprovado: typecheck, ESLint, 183 testes e builds web/servidor. E2E desktop/móvel: 33 de 34 na execução ampla; o cenário de atualização de download móvel atingiu timeout com controles auto-ocultos. O helper passou a revelar controles pela interação de teclado suportada; esse cenário reexecutado passou. Após o ajuste final de restauração, os 3 cenários de EPUB, notas/responsividade e locator nativo também passaram.
-- CSP verificada separadamente no Chromium usando os hosts/caminhos sintéticos da engine: script Readium permitido, script inline e arquivo JavaScript da publicação bloqueados. Isso complementa os testes de sanitização; não substitui instrumentação Readium Android.
+- Local: JDK 17, SDK/target 36, mínimo 28; `testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest` aprovado com 21 unitários, sem falhas nem skips. APK e instrumentação compilados; assinatura debug verificada por apksigner. O build limpo anterior também passou. `adb devices` local não apresentou aparelho/emulador.
+- APK local `litera-0.5.5-debug.apk`: versionCode `5005`; SHA-256 `ece911b6bfb297aa44cc81486604d7cc17555df5b0fa4de4c83bea032d5db51f`. CI tem assinatura/timestamps próprios; conferir o `SHA256SUMS` do artifact correspondente.
+- Web/API: `npm run verify` local aprovado, com 183 testes e builds web/servidor. O [CI web integrado](https://github.com/rafaelhschuh/litera/actions/runs/39713726855) aprovou 183 testes, 29 verificações de storage/sync em WebKit, 34 E2E Chromium desktop/móvel e build Docker. As alterações posteriores são restritas ao Android/documentação/workflow, sem alteração do código web validado.
+- CSP verificada separadamente no Chromium com os hosts/caminhos sintéticos Readium: script da engine permitido, script inline e arquivo JavaScript da publicação bloqueados. Complementa os testes de sanitização e a instrumentação Android.
 - Ícone conferido no [preview de máscaras](assets/icon-preview.png), sem inferir resultado de launcher físico.
-- APK local `litera-0.5.5-debug.apk`: versionCode `5005`, assinatura debug verificada por apksigner; SHA-256 `b23aeeb189e487f7685764c70e1ab5429d129e7488d4648ab439d1719112374b` (este hash é do build local; CI tem assinatura/timestamps próprios).
+- [CI Android aprovado](https://github.com/rafaelhschuh/litera/actions/runs/39782367159), código `674ac70`: unitários/lint/APK e 4 cenários instrumentados em Android 15/API 35, sem falhas, erros ou skips. Engines reais Readium 3.2.0/PdfRenderer; login/cookie, cliente independente com sessão cifrada persistida, EPUB sanitizado, navegação capítulo/página, tema e cores da engine sem substituir fragmento, gravação e restauração após recriação. O servidor desses cenários é a fixture de API versionada; não é evidência de servidor Litera real.
+- Capturas dessa execução conferidas: [catálogo](assets/native-catalog.png), [EPUB escuro](assets/native-epub-dark.png), [PDF](assets/native-pdf.png). A revisão visual corrigiu o contraste da capa padrão e alinhou o papel/tinta Readium aos controles/barras. As capturas mostram uma tela pequena com fixtures; não certificam launcher físico, recorte real ou todos os arquivos EPUB/PDF.
 
-Execução Android no GitHub e validação física devem registrar seus resultados separadamente abaixo, sem converter compilação em evidência de execução.
+Aparelho físico e integração com servidor Litera real continuam pendentes nos checklists acima. O PR permanece em draft, sem merge até o teste e autorização do usuário.

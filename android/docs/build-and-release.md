@@ -27,6 +27,10 @@ Os gates são testes unitários, lint e montagem do APK debug, além de instrume
 
 Um artifact gerado não comprova os testes físicos. Registre a execução efetiva e os resultados em [testing.md](testing.md), incluindo gaps do ambiente.
 
+## Aprovação deste preview
+
+O PR de implementação nativa permanece em draft: por instrução explícita do usuário, não fazer merge antes de ele testar o APK e autorizar a integração. Publicar artifacts de teste e enviar commits à branch do PR não autoriza merge nem release estável.
+
 ## Assinatura e preview
 
 O APK debug de CI usa chave debug efêmera do runner. É um **preview**, sem identidade de assinatura estável entre execuções. Instalar um artifact sobre outro pode falhar por incompatibilidade de assinatura; reinstalação pode apagar arquivos privados, sessão e progresso ainda não sincronizado. Sincronize antes.
