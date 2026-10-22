@@ -58,6 +58,10 @@ android {
         // Pinned, tested tools are deliberate. New upstream releases must not
         // turn a reproducible build into a failure without any source change.
         disable += setOf("GradleDependency", "AndroidGradlePluginVersion")
+        // ADR-0010 pins target 36 for this sideloaded preview. SDKs preinstalled
+        // on CI must not silently change its compatibility behavior. Raise the
+        // target only with the corresponding device/engine regression gates.
+        disable += "OldTargetApi"
     }
 }
 

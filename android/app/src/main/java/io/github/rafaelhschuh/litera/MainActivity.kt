@@ -189,7 +189,7 @@ class MainActivity : AppCompatActivity() {
     private fun input(parent: LinearLayout, hint: Int, id: Int, kind: Int): TextInputEditText {
         val wrapper = TextInputLayout(this).apply { this.hint = getString(hint); boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE }
         val field = TextInputEditText(wrapper.context).apply { this.id = id; inputType = kind; maxLines = 1; setSingleLine(true) }
-        wrapper.addView(field, ViewGroup.LayoutParams(-1,-2)); parent.addView(wrapper, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin = spacing })
+        wrapper.addView(field, LinearLayout.LayoutParams(-1,-2)); parent.addView(wrapper, LinearLayout.LayoutParams(-1,-2).apply { bottomMargin = spacing })
         return field
     }
     private fun setup() {

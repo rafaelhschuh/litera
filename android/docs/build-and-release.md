@@ -2,7 +2,7 @@
 
 ## Ferramentas e versão
 
-O subprojeto usa Kotlin, AndroidX Views, Readium EPUB e Android PdfRenderer, Android Gradle Plugin 9.0.1, Gradle Wrapper 9.1.0, JDK 17 e SDK 36 (compile/target); mínimo Android 9/API 28. Use o wrapper versionado e valide sua integridade. Não dependa de Gradle global nem copie SDK/keystore para o repositório.
+O subprojeto usa Kotlin, AndroidX Views, Readium EPUB e Android PdfRenderer, Android Gradle Plugin 9.0.1, Gradle Wrapper 9.1.0, JDK 17 e SDK 36 (compile/target); mínimo Android 9/API 28. Use o wrapper versionado e valide sua integridade. Não dependa de Gradle global nem copie SDK/keystore para o repositório. O target deste preview é explicitamente API 36 (ADR-0010), mesmo quando o runner tem um SDK posterior instalado. O aviso consultivo `OldTargetApi` é desabilitado com justificativa no módulo; os demais diagnósticos funcionais continuam falhando o build. Subir o target exige revisar mudanças de comportamento e executar os gates de engines/ciclo de vida/barras, além das exigências de distribuição aplicáveis.
 
 A versão vem de [`package.json`](../../package.json) na raiz. `versionName` acompanha a versão semântica; `versionCode = major * 1_000_000 + minor * 1_000 + patch`. Minor/patch precisam caber em três dígitos e o código deve respeitar o limite Android. Não altere versão Android isoladamente nem faça bump automático ao executar o build.
 
