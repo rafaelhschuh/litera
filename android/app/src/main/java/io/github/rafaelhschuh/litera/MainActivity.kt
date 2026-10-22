@@ -250,7 +250,10 @@ class MainActivity : AppCompatActivity() {
     private fun dialogContext(): android.content.Context {
         val configuration = Configuration(resources.configuration)
         configuration.uiMode = (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or if(appearance?.dark ?: (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
-        return ContextThemeWrapper(createConfigurationContext(configuration),R.style.Theme_Litera)
+        return ContextThemeWrapper(this,R.style.Theme_Litera).apply {
+            // Keep the Activity's WindowManager token while overriding resources.
+            applyOverrideConfiguration(configuration)
+        }
     }
     private fun settings() {
         val context = dialogContext()
@@ -318,14 +321,23 @@ class MainActivity : AppCompatActivity() {
         if(foreground && awake && appearance?.reader == true && web != null) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
-    override fun onResume() { super.onResume(); foreground = true; web?.onResume(); if(trustedTop()) web?.evaluateJavascript(HostScripts.resume,null); updateAwake() }
+    override fun onResume() { super.onResume(); foreground = true; appearance?.let(::applyAppearance); web?.onResume(); if(trustedTop()) web?.evaluateJavascript(HostScripts.resume,null); updateAwake() }
     override fun onPause() { foreground = false; pausePage(); updateAwake(); web?.onPause(); super.onPause() }
     override fun onSaveInstanceState(outState: Bundle) {
         pausePage(); val state = Bundle(); web?.saveState(state)
         outState.putString("web-origin",origin?.value); outState.putBundle("web-state",state)
         super.onSaveInstanceState(outState)
     }
-    override fun onConfigurationChanged(newConfig: Configuration) { super.onConfigurationChanged(newConfig); if(web == null) setup() else { observe(); ViewCompat.requestApplyInsets(root) } }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if(web == null) {
+            val address = findViewById<EditText>(R.id.server_url)?.text?.toString()
+            val allowHttp = findViewById<CheckBox>(R.id.allow_http)?.isChecked
+            setup()
+            address?.let { findViewById<EditText>(R.id.server_url)?.setText(it) }
+            allowHttp?.let { findViewById<CheckBox>(R.id.allow_http)?.isChecked = it }
+        } else { appearance?.let(::applyAppearance); observe(); ViewCompat.requestApplyInsets(root) }
+    }
     private fun closeWeb() {
         fileCallback?.onReceiveValue(null); fileCallback = null
         closeFullscreen()
