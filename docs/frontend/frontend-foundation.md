@@ -90,3 +90,9 @@ Use semantic HTML, visible focus, keyboard navigation, sufficient contrast, acce
 ## Anti-drift rule
 
 Before creating a visual component, search this foundation and the existing codebase for an equivalent. Reuse or extend it when semantically correct. Do not add arbitrary colors, radii, shadows, spacing scales, form patterns, modal behavior, or feedback patterns without a documented semantic reason.
+
+## Android host boundary
+
+The [Android host](../../android/README.md) displays this same web UI in a top-level WebView. Keep components, reader controls, dialogs, theme tokens and offline behavior shared. Kotlin handles server setup and window integration, not a parallel design system. Follow [ADR-0010](../decisions/ADR-0010-android-webview-host.md) and [android/AGENTS.md](../../android/AGENTS.md) when changing host appearance, pause or Back behavior.
+
+`theme-color` and active reader/application CSS tokens are the appearance authority for native bars and contrast. Native insets handle camera/system bars and IME; avoid double safe-area padding. The declarative host bridge is optional for browsers and grants no privileged capabilities. Core web/PWA/legacy flows must continue without it. Successful synchronization remains silent in the APK as on the web.

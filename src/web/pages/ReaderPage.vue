@@ -639,7 +639,7 @@ function scheduleLayout() {
     })
   }, 120)
 }
-function visibility(event?: Event) { if (document.visibilityState === 'hidden' || event?.type === 'pagehide') { if (book.value?.format === 'epub') captureEpub(); else captureReflow() } else scheduleLayout() }
+function visibility(event?: Event) { if (document.visibilityState === 'hidden' || event?.type === 'pagehide' || event?.type === 'litera-host-pause') { if (book.value?.format === 'epub') captureEpub(); else captureReflow() } else scheduleLayout() }
 function documentSelection() {
   if (book.value?.format !== 'pdf') return
   const root = readerMode.value === 'reflow' ? stage.value?.querySelector('.reader-document') : pdfSpread.value
@@ -651,7 +651,7 @@ function retry() { window.location.reload() }
 onMounted(async () => {
   try { toolbarPosition.value = localStorage.getItem('litera-reader-toolbar-position') === 'bottom' ? 'bottom' : 'top' } catch { /* Keep the default when optional browser storage is denied. */ }
   bodyOverflow = document.body.style.overflow; bodyOverscroll = document.body.style.overscrollBehavior; document.body.style.overflow = 'hidden'; document.body.style.overscrollBehavior = 'none'
-  addEventListener('keydown', onKey); addEventListener('resize', scheduleLayout, { passive: true }); addEventListener('orientationchange', scheduleLayout, { passive: true }); visualViewport?.addEventListener('resize', scheduleLayout, { passive: true }); document.addEventListener('fullscreenchange', scheduleLayout); document.addEventListener('visibilitychange', visibility); document.addEventListener('selectionchange', documentSelection); addEventListener('pagehide', visibility); updateViewport(); showChrome()
+  addEventListener('keydown', onKey); addEventListener('resize', scheduleLayout, { passive: true }); addEventListener('orientationchange', scheduleLayout, { passive: true }); visualViewport?.addEventListener('resize', scheduleLayout, { passive: true }); document.addEventListener('fullscreenchange', scheduleLayout); document.addEventListener('visibilitychange', visibility); document.addEventListener('selectionchange', documentSelection); addEventListener('pagehide', visibility); addEventListener('litera-host-pause', visibility); addEventListener('litera-host-resume', visibility); updateViewport(); showChrome()
   try {
     bookSource = await openBookSource(id)
     if (unmounting) { bookSource.dispose(); return }
@@ -663,7 +663,7 @@ onMounted(async () => {
   } catch (error) { message.value = errorMessage(error); state.value = 'error'; restoring = false }
 })
 onBeforeUnmount(() => {
-  if (book.value?.format === 'epub') captureEpub(); else captureReflow(); unmounting = true; removeEventListener('keydown', onKey); removeEventListener('resize', scheduleLayout); removeEventListener('orientationchange', scheduleLayout); visualViewport?.removeEventListener('resize', scheduleLayout); document.removeEventListener('fullscreenchange', scheduleLayout); document.removeEventListener('visibilitychange', visibility); document.removeEventListener('selectionchange', documentSelection); removeEventListener('pagehide', visibility)
+  if (book.value?.format === 'epub') captureEpub(); else captureReflow(); unmounting = true; removeEventListener('keydown', onKey); removeEventListener('resize', scheduleLayout); removeEventListener('orientationchange', scheduleLayout); visualViewport?.removeEventListener('resize', scheduleLayout); document.removeEventListener('fullscreenchange', scheduleLayout); document.removeEventListener('visibilitychange', visibility); document.removeEventListener('selectionchange', documentSelection); removeEventListener('pagehide', visibility); removeEventListener('litera-host-pause', visibility); removeEventListener('litera-host-resume', visibility)
   epubAbort?.abort(); epubGeneration++; presentation?.remove(); resizeObserver?.disconnect(); stageInputCleanup?.(); frameInputCleanup?.(); frameEventCleanup?.(); renders.cancel(); for (const layer of pdfTextLayers) layer?.cancel?.(); reflowGeneration++; searchGeneration++; clearTimeout(chromeTimer); clearTimeout(layoutTimer); cancelAnimationFrame(viewportFrame); cancelAnimationFrame(selectionFrame); bookSource?.dispose(); reflowView = undefined; epubViews.fill(undefined); fallbackReady?.(); fallbackReady = undefined; pdf = undefined; try { void pdfLoadingTask?.destroy?.().catch(() => undefined) } catch { /* deterministic cleanup */ }
   applyReaderTheme()
   document.body.style.overflow = bodyOverflow; document.body.style.overscrollBehavior = bodyOverscroll

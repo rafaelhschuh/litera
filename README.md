@@ -207,3 +207,11 @@ Passos de reprodução, impacto e mitigação estão consolidados em [`docs/deve
 ## Licença
 
 Litera é software livre licenciado exclusivamente sob a [GNU General Public License v3.0](LICENSE), identificada por SPDX como `GPL-3.0-only`.
+
+## Android (preview)
+
+O [subprojeto Android](android/README.md) hospeda o aplicativo web completo em WebView, com configuração inicial Kotlin, barras/teclado/insets, Voltar, pausa e ícone adaptativo. Reutiliza os leitores e offline existentes; não mantém uma segunda interface/leitor. Requer Android 9+ e provedor WebView com suporte a múltiplos perfis, verificado em runtime. HTTPS é recomendado; HTTP remoto pode impedir offline completo.
+
+Sessão e downloads do APK são independentes do Chrome/PWA. A versão deriva desta raiz (`0.5.5`). O [workflow adicional](.github/workflows/android.yml) gera APK debug e relatórios sem alterar a publicação Docker/web. Consulte [arquitetura](android/docs/architecture.md), [segurança](android/docs/security.md), [testes](android/docs/testing.md) e [build/assinatura](android/docs/build-and-release.md).
+
+O preview nativo anterior foi rejeitado sem merge. O novo PR WebView fica em draft e aguarda teste do APK e autorização expressa do usuário antes de merge; CI aprovado não substitui essa aprovação.

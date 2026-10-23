@@ -82,6 +82,19 @@ A documented Docker Compose deployment must provide persistent configuration, ca
 ### FR-012 — Future client compatibility
 The domain/API boundaries must allow a future Android client without coupling reading progress to browser-only state.
 
+### FR-013 — Android WebView host
+Android must reuse the complete existing Litera web application through a Kotlin WebView host, with coherent system integration and no duplicate reader/domain implementation.
+
+**Acceptance criteria**
+- Native setup validates a canonical server origin; HTTPS is default, HTTP requires explicit consent, and invalid TLS cannot be bypassed.
+- The app requires runtime multi-profile support and selects a persistent WebView profile per origin before loading; unsupported providers receive update guidance.
+- Catalogue, account, EPUB/PDF, preferences and offline/outbox use the existing web implementation; Chrome/PWA storage is independent.
+- System bars follow application/reader themes; cutout, navigation and IME insets keep controls usable. The adaptive icon retains safe margins and theme support.
+- Back respects overlays/fullscreen and application history; pause captures progress through existing persistence without a parallel Kotlin queue.
+- The restricted appearance bridge validates origin, main frame and trusted top-level document and grants no privileged native capabilities.
+- Network errors preserve available offline content; HTTP remote origins do not promise full offline support without secure-context capability.
+- Automated Android and relevant web regressions pass, and physical acceptance is recorded separately. The preview PR remains draft without merge until the user tests and explicitly authorizes integration.
+
 ## Non-functional requirements
 
 ### NFR-001 — Performance

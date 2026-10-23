@@ -1,0 +1,7 @@
+<resources>
+    <item name="server_url" type="id" />
+    <item name="allow_http" type="id" />
+    <item name="server_connect" type="id" />
+    <item name="host_root" type="id" />
+    <item name="host_webview" type="id" />
+</resources>

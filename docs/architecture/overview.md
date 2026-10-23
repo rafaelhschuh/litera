@@ -61,3 +61,9 @@ Docker Compose
 ```
 
 The exact database engine and process split remain engineering decisions unless later requirements make them architectural constraints.
+
+## Android WebView host
+
+The [Android subproject](../../android/README.md) hosts the existing web application as the top-level WebView document. Kotlin owns server setup, per-origin WebView profile selection, system bars/insets/IME, Back and lifecycle. Existing web readers, IndexedDB downloads and outbox remain authoritative client implementations; server authorization/persistence remains unchanged. No native API repository, reading engine or progress queue is added.
+
+[ADR-0010](../decisions/ADR-0010-android-webview-host.md) records provider capability requirements, restricted appearance messaging, HTTPS/HTTP limits and the rejected native alternative. See [Android architecture](../../android/docs/architecture.md) and [security](../../android/docs/security.md) for boundaries. The APK's profiles are private and independent from Chrome/PWA storage.

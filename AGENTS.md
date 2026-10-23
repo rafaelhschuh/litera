@@ -16,3 +16,5 @@
 13. Treat `/legacy` as a dedicated conservative client over the same API/domain semantics, not as a second backend. Follow `docs/decisions/ADR-0003-legacy-client.md`.
 14. Work in vertical slices: when a feature requires UI, API, persistence, authorization, tests and deployment changes, integrate those layers together rather than leaving one side as long-lived scaffolding.
 15. For staged Codex implementation, follow the exit gates in `CODEX_PROMPTS.md`; do not declare a stage complete while its required end-to-end flows still depend on mocks or TODOs.
+
+16. Android is a Kotlin WebView host of the existing web app. Before changes under `android/` or its web integration, follow [android/AGENTS.md](android/AGENTS.md) and [ADR-0010](docs/decisions/ADR-0010-android-webview-host.md). Do not reintroduce parallel native screens, engines or progress queues. Keep the preview PR in draft without merge until the user tests and explicitly authorizes it.
