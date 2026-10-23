@@ -180,3 +180,6 @@ html{scrollbar-gutter:stable}
 .state--loading>.loading-spinner{justify-self:center}
 
 .button--primary .loading-spinner{border-color:currentColor;border-right-color:transparent}
+
+/* Reading owns the entire viewport, with no catalog scrollbar gutter. */
+html[data-reader-theme]{scrollbar-gutter:auto}

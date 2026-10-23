@@ -27,6 +27,7 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
   await openBook(page, 'A Ilha de Teste')
   await expect(active(page).locator('.reader-document')).toContainText('Conteúdo real')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   for (let turn = 0; turn < 20; turn++) {
     const before = await position(page)
     await page.keyboard.press(turn % 4 === 3 ? 'ArrowLeft' : 'ArrowRight')
@@ -245,6 +246,8 @@ test('EPUB chapter commit keeps an outgoing presentation and reverses correctly'
   await page.evaluate(() => document.getAnimations().forEach(animation => animation.finish()))
 })
 
+test.describe('progress sync feedback', () => {
+test.use({ serviceWorkers: 'block' })
 test('automatic progress sync stays silent while pending and after confirmation', async ({ page }) => {
   await openBook(page, 'A Ilha de Teste')
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
@@ -254,17 +257,24 @@ test('automatic progress sync stays silent while pending and after confirmation'
     if (route.request().method() === 'PUT') await held
     await route.continue()
   })
+  const progressUrl = `/api/v1/books/${new URL(page.url()).pathname.split('/').pop()}/progress`
+  const before = (await (await page.request.get(progressUrl)).json()).progress.revision
   const sending = page.waitForRequest(request => request.method() === 'PUT' && request.url().endsWith('/progress'))
   await page.keyboard.press('ArrowRight')
   const request = await sending
   await expect(page.locator('.reader-sync')).toHaveCount(0)
-  const confirmed = page.waitForResponse(response => response.request() === request)
+  const sent = request.postDataJSON()
   release()
-  expect((await confirmed).ok()).toBe(true)
+  // WebKit service-worker traffic may have no page response event. Verify the
+  // committed API state rather than relying on a browser event/object identity.
+  await expect.poll(async () => (await (await page.request.get(new URL(request.url()).pathname)).json()).progress.revision).toBeGreaterThan(before)
+  await expect.poll(async () => (await (await page.request.get(new URL(request.url()).pathname)).json()).progress.locator).toEqual(sent.locator)
   await expect(page.locator('.reader-sync')).toHaveCount(0)
   await page.getByRole('link', { name: 'Voltar ao livro' }).focus()
   await page.getByRole('link', { name: 'Voltar ao livro' }).click()
   await expect(page.locator('.offline-status')).not.toContainText(/Sincronizando|Sincronizado|aguardando envio/)
+})
+
 })
 
 test('Chrome theme color follows system, reading theme and leaving the reader', async ({ page }) => {
@@ -362,4 +372,117 @@ test('PDF original and adapted modes use the same themed controls', async ({ pag
   await page.getByRole('button', { name: 'Documento original', exact: true }).click()
   await expect(page.locator('.pdf-canvas').first()).toBeVisible()
   await expect(color).toHaveAttribute('content', '#121211')
+})
+
+test('EPUB: chapter changes always start at the top and exact repeated highlights survive reloads', async ({ page }) => {
+  await openBook(page, 'A Ilha de Teste')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  const id = new URL(page.url()).pathname.split('/').pop()
+  const existing = (await (await page.request.get(`/api/v1/books/${id}/highlights`)).json()).highlights
+  for (const item of existing) await page.request.delete(`/api/v1/highlights/${item.id}`)
+  // Refresh the reader's local highlight list after clearing previous fixtures.
+  await page.reload()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  for (const chapter of [2, 1, 2, 1]) {
+    await active(page).locator('body').evaluate(() => window.scrollTo(0, 2400))
+    await expect.poll(async () => (await position(page)).y).toBeGreaterThan(0)
+    await page.getByRole('button', { name: 'Abrir sumário' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: `Capítulo ${chapter}`, exact: true }).click()
+    await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+    await expect.poll(async () => (await position(page)).y).toBe(0)
+    expect(await page.locator('.reader-stage').evaluate(el => el.scrollTop)).toBe(0)
+  }
+  await active(page).locator('body').evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.locator('.reader-progress')).toHaveAttribute('aria-label', 'Capítulo 2 de 2')
+  await expect.poll(async () => (await position(page)).y).toBe(0)
+  await page.getByRole('button', { name: 'Abrir sumário' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 1', exact: true }).click()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  // A backward selection of the second occurrence in the SAME text node.
+  await active(page).locator('#repeated-1').evaluate(el => {
+    const node = el.firstChild!, start = node.textContent!.indexOf('Eunice', 6)
+    window.getSelection()!.setBaseAndExtent(node, start + 6, node, start)
+  })
+  await expect(page.getByRole('toolbar', { name: 'Ações do trecho selecionado' })).toBeVisible()
+  await page.getByRole('button', { name: 'Destacar', exact: true }).click()
+  await expect(active(page).locator('#repeated-1 mark')).toHaveText('Eunice')
+  const placement = () => active(page).locator('#repeated-1').evaluate(el => [...el.childNodes].map(node => node.nodeType === 1 ? `<mark>${node.textContent}</mark>` : node.textContent).join(''))
+  await expect.poll(placement).toBe('Eunice chegou. <mark>Eunice</mark> ficou. Eunice saiu.')
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/books/${id}/highlights`)).json()).highlights.length).toBe(1)
+  const saved = (await (await page.request.get(`/api/v1/books/${id}/highlights`)).json()).highlights
+  expect(saved[0].locator.textAnchor).toMatchObject({ version: 1, scope: 'epub', exact: 'Eunice' })
+  await page.reload()
+  await expect.poll(placement).toBe('Eunice chegou. <mark>Eunice</mark> ficou. Eunice saiu.')
+  // Split over nested inline nodes, after a mark already split another text node.
+  await active(page).locator('#nested-1 em').evaluate(el => {
+    const range = document.createRange(); range.selectNodeContents(el)
+    const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range)
+  })
+  await page.getByRole('button', { name: 'Destacar', exact: true }).click()
+  await expect(active(page).locator('#nested-1 em mark')).toHaveCount(2)
+  expect(await active(page).locator('#nested-1 > mark').count()).toBe(0)
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await page.getByRole('button', { name: 'Sépia', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect.poll(placement).toBe('Eunice chegou. <mark>Eunice</mark> ficou. Eunice saiu.')
+  await expect(active(page).locator('#nested-1 em mark')).toHaveCount(2)
+})
+
+test('EPUB: viewport pages, chapter navigation, rotation and saved mode retain text position', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openBook(page, 'A Ilha de Teste')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  const id = new URL(page.url()).pathname.split('/').pop()
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await page.getByRole('button', { name: 'Páginas pela tela', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  const metrics = () => active(page).locator('.reader-pages').evaluate(el => ({ x: el.scrollLeft, y: el.scrollTop, width: el.clientWidth, height: el.clientHeight, scrollHeight: el.scrollHeight, total: Math.ceil((el.scrollWidth - 1) / el.clientWidth) }))
+  await expect(active(page).locator('.reader-pages')).toBeVisible()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  expect((await metrics()).total).toBeGreaterThan(10)
+  expect((await metrics()).width).toBe(390)
+  for (let turn = 0; turn < 5; turn++) {
+    const before = await metrics()
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(async () => (await metrics()).x).toBe(before.x + before.width)
+    expect((await metrics()).scrollHeight).toBeLessThanOrEqual((await metrics()).height + 1)
+    expect((await metrics()).y).toBe(0)
+    expect((await position(page)).y).toBe(0)
+  }
+  await expect(page.locator('.reader-progress')).toHaveAttribute('aria-label', /Capítulo 1 de 2 · Página 6 de/)
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/settings`)).json()).preferences.epubFlow).toBe('paginated')
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/books/${id}/progress`)).json()).progress.locator.textOffset).toBeGreaterThan(100)
+  const saved = (await (await page.request.get(`/api/v1/books/${id}/progress`)).json()).progress.locator
+  await page.reload()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await expect.poll(async () => (await metrics()).x).toBe((await metrics()).width * 5)
+  await page.setViewportSize({ width: 844, height: 390 })
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await expect.poll(async () => (await metrics()).x).toBeGreaterThan(0)
+  // Re-layout must keep the same passage visible rather than reverting to chapter start.
+  const delta = await active(page).locator('.reader-document').evaluate((root, offset) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let node: Node | null, remaining = offset
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest('style,script')) continue
+      if (remaining < node.textContent!.length) { const range = document.createRange(); range.setStart(node, remaining); range.setEnd(node, remaining + 1); return range.getBoundingClientRect().left }
+      remaining -= node.textContent!.length
+    }
+    return -999
+  }, saved.textOffset)
+  expect(delta).toBeGreaterThanOrEqual(0); expect(delta).toBeLessThan(844)
+  await page.getByRole('button', { name: 'Abrir sumário' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 2', exact: true }).click()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await expect.poll(async () => (await metrics()).x).toBe(0)
+  await page.keyboard.press('ArrowLeft')
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await expect(page.locator('.reader-progress')).toHaveAttribute('aria-label', /Capítulo 1 de 2/)
+  await expect.poll(async () => (await metrics()).x).toBeGreaterThan(0)
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await page.getByRole('button', { name: 'Rolagem por capítulo', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(active(page).locator('.reader-pages')).toHaveCount(0)
+  await expect.poll(async () => (await position(page)).y).toBeGreaterThan(0)
 })

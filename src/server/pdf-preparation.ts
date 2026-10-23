@@ -13,7 +13,7 @@ const version = '1'
 
 export async function preparedPdfDirectory(file: string, dataDir: string): Promise<string> {
   const stat = await fs.stat(file)
-  const key = createHash('sha256').update(JSON.stringify([version, file, stat.size, stat.mtimeMs])).digest('hex')
+  const key = createHash('sha256').update(JSON.stringify([version, file, stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs])).digest('hex')
   return path.join(dataDir, 'pdf-prepared', key)
 }
 async function exists(file: string): Promise<boolean> {

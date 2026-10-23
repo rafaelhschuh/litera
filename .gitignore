@@ -44,3 +44,6 @@ Thumbs.db
 # Browser verification artifacts
 test-results/
 playwright-report/
+
+# Local development fixtures and verification work
+.codex-local/

@@ -28,7 +28,8 @@ const librarySchema = z.object({ name: z.string().trim().min(1).max(120), path: 
 const progressSchema = z.object({ format: z.enum(['epub', 'pdf']), progressRatio: z.number(), locator: z.record(z.string(), z.unknown()), completed: z.boolean().optional(), revision: z.number().int().nonnegative().optional() })
 const userSchema = z.object({ username: z.string().trim().min(1).max(100), displayName: z.string().trim().min(1).max(120), password: z.string().min(12).max(1024), role: z.enum(['admin', 'reader']).default('reader'), libraryIds: z.array(z.number().int().positive()).default([]) })
 const userUpdateSchema = z.object({ displayName: z.string().trim().min(1).max(120).optional(), role: z.enum(['admin', 'reader']).optional(), active: z.boolean().optional(), password: z.string().min(12).max(1024).optional(), libraryIds: z.array(z.number().int().positive()).optional() })
-const preferenceSchema = z.object({ theme: z.enum(['light', 'sepia', 'dark']), fontScale: z.number().int().min(80).max(140), lineHeight: z.enum(['compact', 'normal', 'relaxed']), margins: z.enum(['narrow', 'normal', 'wide']), appTheme: z.enum(['system', 'light', 'dark']), reducedMotion: z.boolean(), pdfInvert: z.boolean().default(false) })
+const preferenceSchema = z.object({ theme: z.enum(['light', 'sepia', 'dark']), fontScale: z.number().int().min(80).max(140), lineHeight: z.enum(['compact', 'normal', 'relaxed']), margins: z.enum(['narrow', 'normal', 'wide']), appTheme: z.enum(['system', 'light', 'dark']), reducedMotion: z.boolean(), pdfInvert: z.boolean().default(false), epubFlow: z.enum(['scroll', 'paginated']).optional() })
+const textAnchorSchema = z.object({ version: z.literal(1), scope: z.enum(['epub', 'pdf-page', 'pdf-reflow']), start: z.number().int().nonnegative(), end: z.number().int().positive(), exact: z.string().min(1).max(10000), prefix: z.string().max(48), suffix: z.string().max(48) }).refine(anchor => anchor.end - anchor.start === anchor.exact.length)
 const highlightSchema = z.object({ quoteText: z.string().trim().min(1).max(10000), locator: z.record(z.string(), z.unknown()), chapter: z.string().trim().max(500).optional(), pageNumber: z.number().int().positive().optional() })
 const ratingSchema = z.object({ rating: z.number().int().min(0).max(5) })
 const metadataEditSchema = z.object({ title: z.string().trim().min(1).max(500), author: z.string().trim().max(500).nullable().optional(), description: z.string().trim().max(20_000).nullable().optional(), language: z.string().trim().max(50).nullable().optional(), identifier: z.string().trim().max(200).nullable().optional(), series: z.string().trim().max(500).nullable().optional(), seriesIndex: z.number().nonnegative().nullable().optional(), publishedYear: z.number().int().min(0).max(3000).nullable().optional(), genres: z.array(z.string().trim().min(1).max(100)).max(50).default([]) })
@@ -45,7 +46,7 @@ function safeJson(value: string | null): unknown {
 
 function bookSelect(): string {
   return `SELECT b.id, b.title, b.author, b.description, b.language, b.identifier, b.format, b.page_count AS pageCount, b.genres, b.published_year AS publishedYear,
-    b.added_at AS addedAt, MIN(f.id) AS selectedFileId, f.size AS fileSize, f.identity AS fileIdentity, f.modified_ms AS fileModifiedMs, CASE WHEN b.cover_path IS NULL THEN 0 ELSE 1 END AS hasCover,
+    b.cover_path AS coverPath, b.added_at AS addedAt, MIN(f.id) AS selectedFileId, f.size AS fileSize, f.identity AS fileIdentity, f.modified_ms AS fileModifiedMs,f.fingerprint AS fileFingerprint, CASE WHEN b.cover_path IS NULL THEN 0 ELSE 1 END AS hasCover,
     b.series, b.series_index AS seriesIndex, b.metadata_status AS metadataStatus, b.metadata_error AS metadataError,
     p.progress_ratio AS progressRatio, p.locator_payload AS locatorPayload, p.last_read_at AS lastReadAt, p.completed, br.rating AS userRating,
     CASE WHEN fav.book_id IS NULL THEN 0 ELSE 1 END AS favorite
@@ -59,10 +60,10 @@ function bookSelect(): string {
 function bookParams(req: Request): Array<string | number> { return [req.user!.role, req.user!.id, req.user!.id, req.user!.id, req.user!.id] }
 
 function mapBook(row: any): any {
-  const { fileIdentity, fileModifiedMs, ...book } = row
+  const { fileIdentity, fileModifiedMs, fileFingerprint, coverPath, ...book } = row
   delete book.selectedFileId
-  const fileRevision = createHash('sha256').update(JSON.stringify([fileIdentity, row.fileSize, fileModifiedMs])).digest('hex')
-  return { ...book, fileRevision, genres: safeJson(row.genres) ?? [], hasCover: Boolean(row.hasCover), favorite: Boolean(row.favorite), completed: Boolean(row.completed), progressRatio: row.progressRatio ?? null, locator: safeJson(row.locatorPayload), locatorPayload: undefined }
+  const fileRevision = createHash('sha256').update(JSON.stringify([fileIdentity?.split(':').slice(0, 2).join(':'), row.fileSize, fileModifiedMs, fileFingerprint])).digest('hex')
+  return { ...book, fileRevision, coverRevision: coverPath ? createHash('sha256').update(coverPath).digest('hex') : undefined, genres: safeJson(row.genres) ?? [], hasCover: Boolean(row.hasCover), favorite: Boolean(row.favorite), completed: Boolean(row.completed), progressRatio: row.progressRatio ?? null, locator: safeJson(row.locatorPayload), locatorPayload: undefined }
 }
 
 function locateBookFile(db: LiteraDatabase, bookId: number, user: SessionUser): { filePath: string; format: 'epub' | 'pdf' } | undefined {
@@ -166,7 +167,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.6.0', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.6.1', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -237,7 +238,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const book = mapBook(row)
     // Live stat detects edits during a download, even before the next library scan.
     book.fileSize = stat.size
-    book.fileRevision = createHash('sha256').update(JSON.stringify([`${stat.dev}:${stat.ino}`, stat.size, Math.round(stat.mtimeMs)])).digest('hex')
+    book.fileRevision = createHash('sha256').update(JSON.stringify([`${stat.dev}:${stat.ino}`, stat.size, Math.round(stat.mtimeMs), (row as any).fileFingerprint])).digest('hex')
     res.json({ book })
   })
   app.get('/api/v1/books/:id/content', requireUser, (req, res, next) => {
@@ -263,7 +264,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       const stat = fs.statSync(coverPath)
       const etag = `"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`
       res.type('image/jpeg')
-      res.setHeader('Cache-Control', 'private, max-age=86400, stale-while-revalidate=604800')
+      res.setHeader('Cache-Control', req.query.v === createHash('sha256').update(coverPath).digest('hex') ? 'private, max-age=86400' : 'private, no-cache')
       res.setHeader('ETag', etag)
       if (req.headers['if-none-match'] === etag) { res.status(304).end(); return }
       streamFile(req, res, coverPath, next)
@@ -431,6 +432,10 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const input = highlightSchema.safeParse(req.body)
     if (!input.success) return rejected(400, 'INVALID_HIGHLIGHT', 'Highlight payload is invalid')
     if (file.format === 'epub' && input.data.pageNumber) return rejected(400, 'INVALID_HIGHLIGHT', 'EPUB highlights do not use absolute page numbers')
+    if (input.data.locator.textAnchor !== undefined) {
+      const anchor = textAnchorSchema.safeParse(input.data.locator.textAnchor)
+      if (!anchor.success || (file.format === 'epub') !== (anchor.data.scope === 'epub')) return rejected(400, 'INVALID_HIGHLIGHT', 'The selection anchor is invalid')
+    }
     const result = db.prepare(`INSERT INTO highlights(user_id,book_id,quote_text,locator_payload,chapter,page_number) VALUES (?,?,?,?,?,?)`).run(req.user!.id, bookId, input.data.quoteText, JSON.stringify(input.data.locator), input.data.chapter ?? null, input.data.pageNumber ?? null)
     const row = db.prepare(`SELECT id,quote_text AS quoteText,locator_payload AS locatorPayload,chapter,page_number AS pageNumber,rating,created_at AS createdAt,updated_at AS updatedAt FROM highlights WHERE id=?`).get(result.lastInsertRowid) as any
     return { status: 201, body: { highlight: { ...row, locator: safeJson(row.locatorPayload), locatorPayload: undefined } } }
@@ -462,13 +467,14 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   })
 
   app.get('/api/v1/settings', requireUser, (req, res) => {
-    const row = db.prepare(`SELECT theme,font_scale AS fontScale,line_height AS lineHeight,margins,app_theme AS appTheme,reduced_motion AS reducedMotion,pdf_invert AS pdfInvert FROM reader_preferences WHERE user_id=?`).get(req.user!.id) as any
-    res.json({ preferences: row ? { ...row, reducedMotion: Boolean(row.reducedMotion), pdfInvert: Boolean(row.pdfInvert) } : { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false } })
+    const row = db.prepare(`SELECT theme,font_scale AS fontScale,line_height AS lineHeight,margins,app_theme AS appTheme,reduced_motion AS reducedMotion,pdf_invert AS pdfInvert,epub_flow AS epubFlow FROM reader_preferences WHERE user_id=?`).get(req.user!.id) as any
+    res.json({ preferences: row ? { ...row, reducedMotion: Boolean(row.reducedMotion), pdfInvert: Boolean(row.pdfInvert) } : { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll' } })
   })
   app.put('/api/v1/settings', requireUser, mutation(req => {
     const input = preferenceSchema.safeParse(req.body); if (!input.success) return rejected(400, 'INVALID_PREFERENCES', 'Reading preferences are invalid')
-    const value = input.data
-    db.prepare(`INSERT INTO reader_preferences(user_id,theme,font_scale,line_height,margins,app_theme,reduced_motion,pdf_invert) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET theme=excluded.theme,font_scale=excluded.font_scale,line_height=excluded.line_height,margins=excluded.margins,app_theme=excluded.app_theme,reduced_motion=excluded.reduced_motion,pdf_invert=excluded.pdf_invert,updated_at=CURRENT_TIMESTAMP`).run(req.user!.id, value.theme, value.fontScale, value.lineHeight, value.margins, value.appTheme, value.reducedMotion ? 1 : 0, value.pdfInvert ? 1 : 0)
+    const previous = db.prepare('SELECT epub_flow AS epubFlow FROM reader_preferences WHERE user_id=?').get(req.user!.id) as { epubFlow: string } | undefined
+    const value = { ...input.data, epubFlow: input.data.epubFlow ?? previous?.epubFlow ?? 'scroll' }
+    db.prepare(`INSERT INTO reader_preferences(user_id,theme,font_scale,line_height,margins,app_theme,reduced_motion,pdf_invert,epub_flow) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET theme=excluded.theme,font_scale=excluded.font_scale,line_height=excluded.line_height,margins=excluded.margins,app_theme=excluded.app_theme,reduced_motion=excluded.reduced_motion,pdf_invert=excluded.pdf_invert,epub_flow=excluded.epub_flow,updated_at=CURRENT_TIMESTAMP`).run(req.user!.id, value.theme, value.fontScale, value.lineHeight, value.margins, value.appTheme, value.reducedMotion ? 1 : 0, value.pdfInvert ? 1 : 0, value.epubFlow)
     return { status: 200, body: { preferences: value } }
   }))
   app.put('/api/v1/account/password', requireUser, (req, res) => {
@@ -626,8 +632,8 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     try { const provider = configuredMetadataProvider(config, db); if (!provider) { apiError(res, 409, 'PROVIDER_DISABLED', 'Enable the provider before testing it'); return }; await provider.search({ title: 'Pride and Prejudice', author: 'Jane Austen' }); res.json({ healthy: true }) } catch (error) { apiError(res, 503, 'PROVIDER_UNAVAILABLE', error instanceof Error ? error.message : 'Provider unavailable') }
   })
   app.get('/api/v1/admin/metadata/books', requireAdmin, (_req, res) => {
-    const books = db.prepare(`SELECT id,title,author,description,language,identifier,format,genres,published_year AS publishedYear,series,series_index AS seriesIndex,metadata_status AS status,metadata_error AS error,metadata_provider AS provider,metadata_confidence AS confidence,metadata_provenance AS provenance,CASE WHEN cover_path IS NULL THEN 0 ELSE 1 END AS hasCover FROM books ORDER BY updated_at DESC LIMIT 500`).all() as any[]
-    res.json({ books: books.map(book => ({ ...book, genres: safeJson(book.genres) ?? [], hasCover: Boolean(book.hasCover) })) })
+    const books = db.prepare(`SELECT id,title,author,description,language,identifier,format,genres,published_year AS publishedYear,series,series_index AS seriesIndex,metadata_status AS status,metadata_error AS error,metadata_provider AS provider,metadata_confidence AS confidence,metadata_provenance AS provenance,cover_path AS coverPath,CASE WHEN cover_path IS NULL THEN 0 ELSE 1 END AS hasCover FROM books ORDER BY updated_at DESC LIMIT 500`).all() as any[]
+    res.json({ books: books.map(book => ({ ...book, coverPath: undefined, coverRevision: book.coverPath ? createHash('sha256').update(book.coverPath).digest('hex') : undefined, genres: safeJson(book.genres) ?? [], hasCover: Boolean(book.hasCover) })) })
   })
   app.put('/api/v1/admin/metadata/books/:id', requireAdmin, (req, res) => {
     const input = metadataEditSchema.safeParse(req.body)
@@ -647,8 +653,8 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     if (!db.prepare('SELECT id FROM books WHERE id=?').get(bookId)) { apiError(res, 404, 'BOOK_NOT_FOUND', 'Book not found'); return }
     const coverDir = path.join(config.dataDir, 'covers')
     try {
-      const coverPath = await storeOptimizedCover(image, path.join(coverDir, `${bookId}-manual`))
-      db.prepare(`UPDATE books SET cover_path=?,metadata_status='matched',metadata_provider='manual',metadata_provenance='manual',metadata_confidence=1,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(coverPath, bookId)
+      const coverPath = await storeOptimizedCover(image, path.join(coverDir, `${bookId}-manual-${createHash('sha256').update(image).digest('hex')}`))
+      db.prepare(`UPDATE books SET cover_path=?,cover_source='manual',metadata_status='matched',metadata_provider='manual',metadata_provenance='manual',metadata_confidence=1,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(coverPath, bookId)
       res.json({ updated: true, hasCover: true })
     } catch (error) {
       if (error instanceof InvalidCoverError) { apiError(res, 400, 'INVALID_COVER', error.message); return }
@@ -668,7 +674,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.6.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.6.1', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

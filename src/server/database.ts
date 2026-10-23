@@ -208,6 +208,17 @@ export const migrations = [
     PRIMARY KEY(user_id, operation_id)
   );
   `,
+  `
+  ALTER TABLE books ADD COLUMN cover_source TEXT;
+  ALTER TABLE books ADD COLUMN cover_fingerprint TEXT;
+  UPDATE books SET cover_source='manual' WHERE cover_path LIKE '%-manual.web.jpg';
+  ALTER TABLE reader_preferences ADD COLUMN epub_flow TEXT NOT NULL DEFAULT 'scroll';
+  INSERT INTO scan_jobs(library_id,status,correlation_id)
+    SELECT l.id,'queued','catalog-repair-0.6.1' FROM libraries l
+    WHERE EXISTS (SELECT 1 FROM book_files f WHERE f.library_id=l.id)
+      AND NOT EXISTS (SELECT 1 FROM scan_jobs j WHERE j.library_id=l.id AND j.status IN ('queued','running'));
+
+  `,
 ]
 
 export type LiteraDatabase = Database.Database

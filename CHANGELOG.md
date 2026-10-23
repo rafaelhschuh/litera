@@ -7,6 +7,15 @@
 - Workflow adicional para APK debug e validação Android, sem alterar a versão 0.5.5 ou publicação web/container.
 - Contratos Android, ADR e documentação conectados à raiz. O preview nativo rejeitado não foi integrado; o novo PR WebView aguarda teste e autorização do usuário, sem merge.
 
+## 0.6.1 — 2026-10-23
+
+- Scans usam SHA-256 integral para reconciliar movimentos, sem assumir que um inode reutilizado pertence ao livro anterior; hard links e substituições atômicas não colidem no catálogo.
+- Capas automáticas usam nomes derivados da própria imagem e revisão na URL, são atualizadas quando o arquivo muda e reparadas em um scan agendado no upgrade. Capas e metadados manuais são preservados.
+- Arquivos com erro são reavaliados nos rescans, sem voltar indevidamente a disponíveis. Jobs mostram conclusão com erros e o diagnóstico por arquivo; falhas de leitura isoladas não interrompem todo o scan.
+- EPUB oferece rolagem por capítulo ou páginas ajustadas à tela, indicador de capítulo/página, preferência sincronizada e offline, e restauração por posição textual ao redimensionar ou trocar de modo.
+- Navegação de capítulos posiciona o novo conteúdo no início, sem deslocar o contêiner do leitor; a rolagem fica em uma coluna e o leitor ocupa toda a largura útil.
+- Destaques persistem a seleção exata, incluindo repetições no mesmo parágrafo, seleção invertida e nós de texto aninhados. Âncoras antigas ambíguas não são aplicadas arbitrariamente à primeira ocorrência.
+
 ## 0.6.0 — 2026-10-23
 
 - Indicador animado desde o HTML inicial e durante login, com preparação antecipada da Home, capas e detalhes de livros próximos da área visível, sem baixar livros completos; cache e concorrência limitados por conta.

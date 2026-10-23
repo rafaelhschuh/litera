@@ -1,3 +1,5 @@
+import type { TextAnchor } from './text-highlights.js'
+
 export type BookFormat = 'epub' | 'pdf'
 
 export type EpubLocator = {
@@ -6,12 +8,15 @@ export type EpubLocator = {
   chapterHref?: string
   elementIndex?: number
   offset?: number
+  textOffset?: number
+  textAnchor?: TextAnchor
 }
 
 export type PdfLocator = {
   type: 'pdf-page' | 'pdf-reflow'
   page: number
   blockIndex?: number
+  textAnchor?: TextAnchor
   offset?: number
 }
 
@@ -25,7 +30,7 @@ export function normalizeProgress(format: BookFormat, locator: ReadingLocator, r
   }
   if (locator.type !== 'pdf-page' && locator.type !== 'pdf-reflow') throw new Error('PDF progress requires a page locator')
   const maximum = Math.max(1, pageCount ?? Number.MAX_SAFE_INTEGER)
-  return { locator: { type: locator.type, page: Math.min(maximum, Math.max(1, Math.round(locator.page))), offset: locator.offset, ...(locator.type === 'pdf-reflow' && Number.isInteger(locator.blockIndex) && locator.blockIndex! >= 0 ? { blockIndex: locator.blockIndex } : {}) }, progressRatio }
+  return { locator: { type: locator.type, page: Math.min(maximum, Math.max(1, Math.round(locator.page))), offset: locator.offset, ...(locator.textAnchor ? { textAnchor: locator.textAnchor } : {}), ...(locator.type === 'pdf-reflow' && Number.isInteger(locator.blockIndex) && locator.blockIndex! >= 0 ? { blockIndex: locator.blockIndex } : {}) }, progressRatio }
 }
 
 export function pdfProgress(page: number, pageCount: number): number {

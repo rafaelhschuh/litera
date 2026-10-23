@@ -75,8 +75,10 @@ describe('Litera integrated API', () => {
     expect((await context.agent.put(`/api/v1/books/${epub.id}/rating`).send({ rating: 5 })).body.rating).toBe(5)
     expect((await context.agent.get(`/api/v1/books/${epub.id}`)).body.book.userRating).toBe(5)
     expect((await context.agent.post(`/api/v1/books/${epub.id}/highlights`).send({ quoteText: 'Página inventada', locator: { type: 'epub-cfi', cfi: 'epubcfi(/6/2)' }, pageNumber: 3 })).status).toBe(400)
+    expect((await context.agent.post(`/api/v1/books/${epub.id}/highlights`).send({ quoteText: 'Eunice', locator: { type: 'epub-cfi', cfi: 'epubcfi(/6/2)', textAnchor: { version: 1, scope: 'epub', start: 15, end: 21, exact: 'Eunice', prefix: '', suffix: '' } } })).status).toBe(201)
+    expect((await context.agent.post(`/api/v1/books/${epub.id}/highlights`).send({ quoteText: 'Eunice', locator: { type: 'epub-cfi', cfi: 'epubcfi(/6/2)', textAnchor: { version: 1, scope: 'pdf-page', start: 15, end: 21, exact: 'Eunice', prefix: '', suffix: '' } } })).status).toBe(400)
     expect((await context.agent.post(`/api/v1/books/${pdf.id}/highlights`).send({ quoteText: 'Trecho da página', locator: { type: 'pdf-page', page: 1 }, pageNumber: 1 })).status).toBe(201)
-    expect((await context.agent.get(`/api/v1/books/${epub.id}/highlights`)).body.highlights).toHaveLength(1)
+    expect((await context.agent.get(`/api/v1/books/${epub.id}/highlights`)).body.highlights).toHaveLength(2)
     expect((await context.agent.delete(`/api/v1/highlights/${created.body.highlight.id}`)).status).toBe(204)
   })
 
@@ -98,8 +100,19 @@ describe('Litera integrated API', () => {
     const response = await context.agent.get(`/api/v1/books/${pdf.id}/cover`)
     expect(response.status).toBe(200)
     expect(response.headers['content-type']).toMatch(/^image\/jpeg/)
-    expect(response.headers['cache-control']).toContain('stale-while-revalidate=604800')
+    expect(response.headers['cache-control']).toBe('private, no-cache')
     expect((await context.agent.get(`/api/v1/books/${pdf.id}/cover`).set('If-None-Match', response.headers.etag)).status).toBe(304)
     expect((await context.agent.put(`/api/v1/admin/metadata/books/${pdf.id}/cover`).send({ dataUrl: 'data:image/png;base64,iVBORw0KGgo=' })).status).toBe(400)
   })
+  it('persists EPUB page mode and preserves it when older clients update other preferences', async () => {
+    await login(context.agent)
+    const preferences = (await context.agent.get('/api/v1/settings')).body.preferences
+    expect(preferences.epubFlow).toBe('scroll')
+    expect((await context.agent.put('/api/v1/settings').send({ ...preferences, epubFlow: 'paginated' })).status).toBe(200)
+    const legacy = { ...preferences }; delete legacy.epubFlow
+    expect((await context.agent.put('/api/v1/settings').send(legacy)).body.preferences.epubFlow).toBe('paginated')
+    expect((await context.agent.get('/api/v1/settings')).body.preferences.epubFlow).toBe('paginated')
+    expect((await context.agent.put('/api/v1/settings').send({ ...preferences, epubFlow: 'invented' })).status).toBe(400)
+  })
+
 })

@@ -4,7 +4,7 @@ import { auth } from './auth'
 import { getOfflineUser, offlineContext } from './offline-context'
 import { syncState } from './offline-sync'
 
-type BookSummary = { id: number; hasCover?: boolean; fileRevision?: string }
+type BookSummary = { id: number; hasCover?: boolean; fileRevision?: string; coverRevision?: string }
 export type HomeData = { continueReading: any[]; recentlyAdded: any[] }
 export type BookDetail = { book: any; highlights: any[] }
 type Entry = { revision?: string; expires: number; data?: BookDetail; promise: Promise<void>; controller: AbortController }
@@ -42,18 +42,20 @@ function cover(book: BookSummary, signal: AbortSignal): Promise<void> {
     image.onload = image.onerror = finish
     image.decoding = 'async'
     signal.addEventListener('abort', abort, { once: true })
-    image.src = `/api/v1/books/${book.id}/cover`
+    image.src = `/api/v1/books/${book.id}/cover${book.coverRevision ? `?v=${book.coverRevision}` : ''}`
   })
 }
 
 /** Optional, bounded preparation of visible book details and browser-cached covers. */
 export function warmBook(book: BookSummary): Promise<void> {
   if (!getOfflineUser() || auth.user?.id !== getOfflineUser() || !syncState.online || navigator.onLine === false) return Promise.resolve()
+  const revision = `${book.fileRevision ?? ''}:${book.coverRevision ?? ''}`
   const existing = books.get(book.id)
-  if (existing && existing.revision === book.fileRevision && existing.expires > Date.now()) return existing.promise
+  if (existing && existing.revision === revision && existing.expires > Date.now()) return existing.promise
   if (queue.length >= 12) return Promise.resolve()
+  existing?.controller.abort()
   const owner = current(), controller = new AbortController()
-  const entry: Entry = { revision: book.fileRevision, expires: Date.now() + 30_000, controller, promise: Promise.resolve() }
+  const entry: Entry = { revision, expires: Date.now() + 30_000, controller, promise: Promise.resolve() }
   controllers.add(controller)
   entry.promise = new Promise(resolve => {
     queue.push(async () => {

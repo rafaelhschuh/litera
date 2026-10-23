@@ -12,12 +12,12 @@ onMounted(observe)
 onActivated(observe)
 onDeactivated(release)
 onBeforeUnmount(release)
-watch(() => props.book.fileRevision, () => { release(); observe() })
+watch(() => [props.book.fileRevision, props.book.coverRevision], () => { release(); observe() })
 const emit=defineEmits<{remove:[id:number]}>()
 </script>
 <template>
   <article ref="card" class="book-card" :class="{ 'book-card--compact': compact }" @pointerenter="warmBook(book)" @focusin="warmBook(book)">
-    <RouterLink class="book-card__cover-link" :to="`/books/${book.id}`"><BookCover :id="book.id" :title="book.title" :author="book.author" :has-cover="book.hasCover" :format="book.format" /><span class="book-card__read">Abrir</span></RouterLink>
+    <RouterLink class="book-card__cover-link" :to="`/books/${book.id}`"><BookCover :id="book.id" :title="book.title" :author="book.author" :has-cover="book.hasCover" :cover-revision="book.coverRevision" :format="book.format" /><span class="book-card__read">Abrir</span></RouterLink>
     <div class="book-card__body">
       <h3><RouterLink :to="`/books/${book.id}`">{{ book.title }}</RouterLink></h3>
       <p>{{ book.author || 'Autor desconhecido' }}</p>

@@ -29,7 +29,7 @@ let running: Promise<void> | undefined
 let cleanup: (() => void) | undefined
 let probeFailures = 0
 const controllers = new Set<AbortController>()
-const defaultPreferences = { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false }
+const defaultPreferences = { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll' }
 function operationId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)

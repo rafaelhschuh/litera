@@ -45,3 +45,15 @@ The project should maintain a practical matrix containing at least one current C
 4. Scanning is idempotent.
 5. Metadata enrichment improves results without breaking local use.
 6. Authorization boundaries hold.
+
+
+## Regressões 0.6.1
+
+- `tests/catalog-identity.test.ts`: upload seguido de job com colisão de inode determinística, reparação/versionamento de capas, hard links, substituição atômica, prioridade manual e erro persistente em rescan.
+- `tests/reader-stability.test.ts`: offsets exatos, seleção entre chunks, contexto único e rejeição de citações antigas ambíguas.
+- `tests/e2e/reader.spec.ts`: início do capítulo por sumário/avanço, segunda palavra repetida no mesmo nó, seleção invertida/aninhada, reload/tema, paginação por viewport, rotação, retorno entre capítulos e troca de modo.
+- `tests/integration.test.ts`: preferência EPUB e compatibilidade de payloads antigos, validação do escopo das âncoras, capas e autorização existentes.
+- `tests/beta.test.ts`: migration aditiva agenda reparo durável preservando usuários, catálogo e progresso.
+- `/legacy` mantém navegação conservadora; Android não faz parte desta entrega. Safari físico continua sendo uma validação do mantenedor, separada do WebKit automatizado.
+
+No WebKit automatizado desta rodada, `BrowserContext.setOffline(true)` faz até `new Blob(['hello']).text()` e `FileReader` falharem com `NotReadableError`. O novo E2E de paginação offline induz respostas 503 da API exclusivamente para aquele browser no servidor de testes e dispara o evento offline nesse motor, confirma a indisponibilidade da API e que a preferência não chegou ao servidor antes da reconexão. Chromium desktop/mobile usam o modo offline do contexto. Isso é evidência de comportamento sob falha de transporte no WebKit; não substitui modo avião em Safari físico. O teste de feedback de sync bloqueia service workers para poder segurar a requisição determinísticamente e verifica o estado persistido pela API.

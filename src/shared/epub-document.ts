@@ -1,4 +1,5 @@
 export type EpubAppearance = {
+  flow?: 'scroll' | 'paginated'
   fontScale: number
   theme: 'light' | 'sepia' | 'dark'
   lineHeight: 'compact' | 'normal' | 'relaxed'
@@ -12,7 +13,8 @@ export function epubAppearanceCss(preferences: EpubAppearance): string {
   const scale = Math.min(140, Math.max(80, Number(preferences.fontScale) || 100))
   const lineHeight = ({ compact: 1.45, normal: 1.65, relaxed: 1.85 })[preferences.lineHeight] ?? 1.65
   const measure = ({ narrow: 42, normal: 56, wide: 72 })[preferences.margins] ?? 56
-  return `html,body{background:${palette[0]}!important;color:${palette[1]}!important}.reader-document{font-size:${18 * scale / 100}px!important;line-height:${lineHeight}!important;width:min(${measure}rem,100%)!important}@media(min-width:1100px) and (orientation:landscape){.reader-document{width:min(${measure + 24}rem,calc(100% - 4rem))!important}}`
+  const flow = preferences.flow === 'paginated' ? `html,body{height:100%;overflow:hidden;overscroll-behavior:none}body{margin:0}.reader-pages{width:100%;height:100vh;overflow:hidden;scroll-behavior:auto;overflow-anchor:none}.reader-pages>.reader-document{box-sizing:border-box;width:100%!important;height:100%;min-height:0;margin:0;padding:5rem var(--epub-gutter) 6rem;--epub-gutter:max(1rem,calc((100vw - ${measure}rem)/2));column-count:1;column-width:auto;column-fill:auto;column-gap:calc(2 * var(--epub-gutter));column-rule:none;overflow-wrap:anywhere}.reader-document img,.reader-document svg{max-height:calc(100vh - 11rem);object-fit:contain}.reader-document p,.reader-document blockquote{break-inside:auto}` : '.reader-document{column-count:1!important;column-width:auto!important;overflow-anchor:none}'
+  return `html,body{background:${palette[0]}!important;color:${palette[1]}!important}.reader-document{font-size:${18 * scale / 100}px!important;line-height:${lineHeight}!important;width:min(${measure}rem,100%)!important}@media(min-width:1100px) and (orientation:landscape){.reader-document{width:min(${measure + 24}rem,calc(100% - 4rem))!important}}${flow}`
 }
 
 const cssUrlPattern = () => /url\(\s*(?:"((?:\\.|[^"\\\n])*)"|'((?:\\.|[^'\\\n])*)'|((?:\\.|[^\s)'"\\])+))\s*\)/gi
@@ -68,6 +70,12 @@ export async function prepareEpubDocument(html: string, preferences: EpubAppeara
       style.textContent = await stylesheet(link.getAttribute('href')!)
       link.replaceWith(style)
     }
+  }
+  if (preferences.flow === 'paginated') {
+    const viewport = document.createElement('div')
+    viewport.className = 'reader-pages'
+    const content = document.querySelector('.reader-document')!
+    content.replaceWith(viewport); viewport.append(content)
   }
   const appearance = document.createElement('style')
   appearance.dataset.literaAppearance = 'true'

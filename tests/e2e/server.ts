@@ -1,3 +1,4 @@
+import http from 'node:http'
 import { testContext, login } from '../setup.js'
 import { writeFidelityPdf } from '../fixtures.js'
 import fs from 'node:fs/promises'
@@ -49,7 +50,7 @@ for (const chapter of [1, 2]) {
   const name = `OEBPS/chapter-${chapter}.xhtml`
   const original = await zip.file(name)!.async('string')
   const image = chapter === 1 ? 'arrival' : 'crossing'
-  zip.file(name, original.replace('</head>', '<link rel="stylesheet" href="styles/book.css"/></head>').replace('</body>', `<figure class="offline-figure"><img src="images/${image}.png" alt="Ilustração offline ${chapter}"/><figcaption class="offline-caption">Legenda offline ${chapter}</figcaption></figure>` + Array.from({ length: 180 }, (_, index) => `<p>Capitulo ${chapter}, paragrafo ${index}. Texto longo para navegar, selecionar e restaurar uma posicao sem perder conteudo.</p>`).join('') + '</body>'))
+  zip.file(name, original.replace('</head>', '<link rel="stylesheet" href="styles/book.css"/></head>').replace('</body>', `<p id="repeated-${chapter}">Eunice chegou. Eunice ficou. Eunice saiu.</p><p id="nested-${chapter}">Eunice encontrou <em>Eu<strong>nice</strong></em> na praça.</p><figure class="offline-figure"><img src="images/${image}.png" alt="Ilustração offline ${chapter}"/><figcaption class="offline-caption">Legenda offline ${chapter}</figcaption></figure>` + Array.from({ length: 180 }, (_, index) => `<p>Capitulo ${chapter}, paragrafo ${index}. Texto longo para navegar, selecionar e restaurar uma posicao sem perder conteudo.</p>`).join('') + '</body>'))
 }
 await fs.writeFile(epubPath, await zip.generateAsync({ type: 'nodebuffer' }))
 await login(context.agent)
@@ -64,7 +65,16 @@ context.app.post('/__e2e/revise-epub', requireAdmin, async (_req, res, next) => 
     res.json({ libraryId: library.body.library.id })
   } catch (error) { next(error) }
 })
-const server = context.app.listen(3107, '127.0.0.1')
+// Transport fault confined to an individual test browser; production has no
+// such switch. WebKit's protocol offline mode also disables local Blob I/O.
+const server = http.createServer((req, res) => {
+  if (req.url?.startsWith('/api/') && req.headers.cookie?.split(';').some(cookie => cookie.trim() === 'litera-e2e-offline=1')) {
+    res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify({ error: { code: 'TEST_UNREACHABLE', message: 'Servidor indisponível durante a simulação offline.' } }))
+    return
+  }
+  context.app(req, res)
+}).listen(3107, '127.0.0.1')
 async function close() { server.close(); await context.cleanup(); process.exit(0) }
 process.on('SIGTERM', close)
 process.on('SIGINT', close)

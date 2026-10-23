@@ -5,6 +5,7 @@ import type { PdfReaderMode, PdfZoomMode } from '../../shared/pdf-reader'
 
 defineProps<{
   format: 'epub' | 'pdf'
+  epubFlow: 'scroll' | 'paginated'
   mode: PdfReaderMode
   toolbarPosition: 'top' | 'bottom'
   textScale: number
@@ -16,6 +17,7 @@ const lineHeight = defineModel<'compact' | 'normal' | 'relaxed'>('lineHeight', {
 const margins = defineModel<'narrow' | 'normal' | 'wide'>('margins', { required: true })
 const invert = defineModel<boolean>('invert', { required: true })
 defineEmits<{
+  'epub-flow': [flow: 'scroll' | 'paginated']
   toolbar: [position: 'top' | 'bottom']
   mode: []
   text: [delta: number]
@@ -36,6 +38,13 @@ defineEmits<{
       <div class="reader-options">
         <UiButton :aria-pressed="toolbarPosition === 'top'" @click="$emit('toolbar', 'top')">Topo</UiButton>
         <UiButton :aria-pressed="toolbarPosition === 'bottom'" @click="$emit('toolbar', 'bottom')">Base</UiButton>
+      </div>
+    </fieldset>
+    <fieldset v-if="format === 'epub'">
+      <legend>Modo de leitura</legend>
+      <div class="reader-options">
+        <UiButton :aria-pressed="epubFlow === 'scroll'" @click="$emit('epub-flow', 'scroll')">Rolagem por capítulo</UiButton>
+        <UiButton :aria-pressed="epubFlow === 'paginated'" @click="$emit('epub-flow', 'paginated')">Páginas pela tela</UiButton>
       </div>
     </fieldset>
     <fieldset v-if="format === 'pdf'">

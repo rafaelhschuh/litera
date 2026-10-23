@@ -8,6 +8,8 @@ The administrator must be able to configure one or more filesystem-backed librar
 **Acceptance criteria**
 - Given a configured readable directory, when a scan runs, supported book files are discovered and cataloged.
 - Re-running a scan does not create duplicate logical books for unchanged files.
+- Recycled inodes must not attach new uploads to missing unrelated books. Content replacements refresh automatic covers; manual covers/metadata retain priority. A failed ingestion remains an error until successfully read again.
+
 - Removed source files are detected without modifying unrelated files.
 
 ### FR-002 — EPUB and PDF ingestion
@@ -48,6 +50,10 @@ Litera must provide its own integrated reader experience rather than delegating 
 - EPUB and PDF can be read in-browser.
 - Reader controls include navigation, table of contents where available, typography/layout controls appropriate to the format, and search where technically supported.
 - Reader remains usable on touch devices and desktop keyboard/mouse input.
+- Modern EPUB readers can choose chapter scrolling or viewport-sized pages; the preference persists online/offline and each chapter opens at its beginning when advancing (or at its end when returning from the following chapter).
+- Viewport pages show chapter/page position and preserve the same passage through changes in size, type and reading mode; they do not become absolute EPUB page numbers.
+- New highlights identify the actual selected text range, including repeated words within one paragraph, reversed selections and inline formatting. Missing/ambiguous old anchors must not silently choose the first occurrence.
+
 
 ### FR-007 — Format-aware reading progress
 Progress must be persisted per user and book using a format-aware locator.

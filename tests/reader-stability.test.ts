@@ -4,7 +4,7 @@ import { structurePdfText } from '../src/shared/pdf-reflow.js'
 import { classifyReaderGesture } from '../src/shared/reader-interaction.js'
 import { normalizeProgress } from '../src/shared/progress.js'
 import { QueuedProgressSaver } from '../src/web/lib/reader-progress.js'
-import { findTextHighlightRanges } from '../src/shared/text-highlights.js'
+import { anchoredHighlightRanges, findTextHighlightRanges } from '../src/shared/text-highlights.js'
 
 describe('reader gesture classification', () => {
   it('distinguishes taps, horizontal swipes and vertical/diagonal scrolls', () => {
@@ -118,5 +118,21 @@ describe('saved highlight matching', () => {
     expect(findTextHighlightRanges(['Repetido', 'Outro texto', 'Repetido'], 'Repetido', 2)).toEqual([
       { chunkIndex: 2, start: 0, end: 8 },
     ])
+  })
+})
+
+
+describe('exact text anchors', () => {
+  it('selects a repeated word by its real character range, even after text nodes split', () => {
+    const anchor = { version: 1 as const, scope: 'epub' as const, start: 15, end: 21, exact: 'Eunice', prefix: 'Eunice chegou. ', suffix: ' ficou.' }
+    expect(anchoredHighlightRanges(['Eunice chegou. Eunice ficou.'], anchor)).toEqual([{ chunkIndex: 0, start: 15, end: 21 }])
+    expect(anchoredHighlightRanges(['Eunice chegou. ', 'Eu', 'nice', ' ficou.'], anchor)).toEqual([{ chunkIndex: 1, start: 0, end: 2 }, { chunkIndex: 2, start: 0, end: 4 }])
+  })
+  it('uses context only for a unique recovery and refuses ambiguous legacy matches', () => {
+    const anchor = { version: 1 as const, scope: 'epub' as const, start: 500, end: 506, exact: 'Eunice', prefix: 'chegou. ', suffix: ' ficou.' }
+    expect(anchoredHighlightRanges(['Eunice chegou. Eunice ficou.'], anchor)).toEqual([{ chunkIndex: 0, start: 15, end: 21 }])
+    expect(anchoredHighlightRanges(['Eunice Eunice'], { ...anchor, prefix: '', suffix: '' })).toEqual([])
+    expect(anchoredHighlightRanges(['Eunice chegou. Eunice mudou.'], { ...anchor, start: 15, end: 21 })).toEqual([])
+    expect(findTextHighlightRanges(['Eunice chegou. Eunice ficou.'], 'Eunice', 0)).toEqual([])
   })
 })

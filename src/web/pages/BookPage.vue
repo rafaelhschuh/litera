@@ -36,7 +36,7 @@ async function rateHighlight(highlight:any,rating:number){await change(async()=>
   <AppState v-else-if="state==='error'" kind="error" title="Livro indisponível" :message="!syncState.online ? 'Este livro não está disponível offline. Conecte-se para abri-lo e salvar um download.' : 'Ele pode ter sido removido do acervo ou não estar liberado para sua conta.'"><button class="text-link" @click="load">Tentar novamente</button></AppState>
   <article v-else class="book-detail" :aria-busy="refreshing">
     <RouterLink class="back-link" to="/library">← Biblioteca</RouterLink>
-    <BookCover :id="book.id" :title="book.title" :author="book.author" :has-cover="book.hasCover" :format="book.format" />
+    <BookCover :id="book.id" :title="book.title" :author="book.author" :has-cover="book.hasCover" :cover-revision="book.coverRevision" :format="book.format" />
     <div class="book-detail__copy">
       <PageRefresh :busy="refreshing" :error="loadError" @retry="load" />
       <p class="eyebrow">{{ book.format.toUpperCase() }}</p><h1>{{ book.title }}</h1>

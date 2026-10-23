@@ -511,3 +511,50 @@ test('offline logout purges account A; account B cannot see or synchronize its b
   await expect(page.locator('mark[data-litera-highlight]')).toHaveCount(0)
   await expect(page.getByText(quote, { exact: true })).toHaveCount(0)
 })
+
+test('offline EPUB preserves viewport pages and the exact repeated-word highlight through reload and sync', async ({ page, context, request, browserName }) => {
+  test.setTimeout(90_000)
+  const user = await createReader(request)
+  await signIn(page, user.username)
+  const { epub } = await fixtureBooks(page)
+  await saveBook(page, epub, user.id)
+  await page.goto(`/read/${epub.id}`)
+  await ready(page)
+  // WebKit's protocol offline mode rejects even memory Blob/FileReader I/O.
+  // A per-browser fixture outage denies API access without breaking local I/O.
+  const serverApi = browserName === 'webkit' ? request : page.request
+  if (browserName === 'webkit') {
+    await request.post('/api/v1/auth/login', { data: { username: user.username, password } })
+    await context.addCookies([{ name: 'litera-e2e-offline', value: '1', url: new URL(page.url()).origin }])
+    expect(await page.evaluate(() => fetch('/api/v1/auth/me').then(response => response.status))).toBe(503)
+    await page.evaluate(() => window.dispatchEvent(new Event('offline')))
+  } else await context.setOffline(true)
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await page.getByRole('button', { name: 'Páginas pela tela', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await ready(page)
+  await expect(active(page).locator('.reader-pages')).toBeVisible()
+  await active(page).locator('#repeated-1').evaluate(el => {
+    const node = el.firstChild!, start = node.textContent!.indexOf('Eunice', 6)
+    const range = document.createRange(); range.setStart(node, start); range.setEnd(node, start + 6)
+    const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range)
+  })
+  await page.getByRole('button', { name: 'Destacar', exact: true }).click()
+  await expect(active(page).locator('#repeated-1 mark')).toHaveText('Eunice')
+  const scroll = () => active(page).locator('.reader-pages').evaluate(el => ({ x: el.scrollLeft, width: el.clientWidth }))
+  for (let turn = 0; turn < 2; turn++) {
+    const before = await scroll()
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(async () => (await scroll()).x).toBe(before.x + before.width)
+  }
+  const saved = await scroll()
+  await page.reload(); await ready(page)
+  await expect.poll(async () => (await scroll()).x).toBe(saved.x)
+  expect(await active(page).locator('#repeated-1').evaluate(el => el.querySelector('mark')!.previousSibling!.textContent)).toBe('Eunice chegou. ')
+  expect((await (await serverApi.get('/api/v1/settings')).json()).preferences.epubFlow).toBe('scroll')
+  if (browserName === 'webkit') await context.addCookies([{ name: 'litera-e2e-offline', value: '0', url: new URL(page.url()).origin }])
+  else await context.setOffline(false)
+  await page.evaluate(() => window.dispatchEvent(new Event('online')))
+  await expect.poll(async () => (await (await page.request.get('/api/v1/settings')).json()).preferences.epubFlow).toBe('paginated')
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/books/${epub.id}/highlights`)).json()).highlights).toMatchObject([{ quoteText: 'Eunice', locator: { textAnchor: { version: 1, scope: 'epub', exact: 'Eunice' } } }])
+})

@@ -156,6 +156,7 @@ describe('MVP to Beta migration', () => {
     expect((upgraded.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as any).version).toBe(migrations.length)
     expect(upgraded.prepare("SELECT name FROM sqlite_master WHERE name='sync_operations'").get()).toBeTruthy()
     expect((upgraded.prepare('SELECT title FROM books').get() as any).title).toBe('Preserved')
+    expect(upgraded.prepare("SELECT status,correlation_id AS correlationId FROM scan_jobs").get()).toEqual({ status: 'queued', correlationId: 'catalog-repair-0.6.1' })
     expect((upgraded.prepare('SELECT progress_ratio AS ratio FROM reading_progress').get() as any).ratio).toBe(.42)
     upgraded.close(); await fs.rm(root, { recursive: true, force: true })
   })
