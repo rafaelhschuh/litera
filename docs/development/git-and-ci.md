@@ -22,7 +22,7 @@ Use short-lived branches or worktrees with required checks before merge when mul
 
 Falhas não são ignoradas. O workflow normal tem somente `contents: read`.
 
-Na instalação das dependências de sistema do Playwright, o CI substitui o mirror Ubuntu da Azure pelo arquivo primário HTTPS do Ubuntu quando o runner usa `/etc/apt/apt-mirrors.txt`. O mirror da Azure esgotou o limite de 30 minutos durante os downloads; essa escolha mantém os mesmos pacotes e gates, sem suprimir a instalação ou seus erros.
+Na instalação das dependências de sistema do Playwright, o CI substitui o mirror Ubuntu da Azure pelo arquivo primário HTTPS do Ubuntu quando o runner usa `/etc/apt/apt-mirrors.txt`. O mirror da Azure esgotou o limite de 30 minutos durante os downloads; essa escolha mantém os mesmos pacotes e gates, sem suprimir a instalação ou seus erros. O gate WebKit roda com um worker e permite 30 segundos nos hooks de preparação dos contextos; o limite das asserções permanece inalterado. Isso evita que o primeiro contexto exceda 10 segundos sob concorrência no runner compartilhado.
 
 ## Imagens e releases
 

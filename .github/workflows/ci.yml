@@ -33,7 +33,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Offline storage and sync — WebKit
-        run: LITERA_STORAGE_BROWSER=webkit npm test -- tests/offline-store.test.ts tests/offline-sync.test.ts
+        # Cold WebKit contexts need more startup time on shared runners.
+        run: LITERA_STORAGE_BROWSER=webkit npm test -- tests/offline-store.test.ts tests/offline-sync.test.ts --hookTimeout=30000 --maxWorkers=1
       - name: Reader E2E — Chromium desktop and mobile
         run: npm run test:e2e -- --project=chromium --project=chromium-mobile
       - uses: docker/setup-buildx-action@v3
