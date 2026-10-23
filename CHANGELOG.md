@@ -7,6 +7,13 @@
 - Workflow adicional para APK debug e validação Android, sem alterar a versão 0.5.5 ou publicação web/container.
 - Contratos Android, ADR e documentação conectados à raiz. O preview nativo rejeitado não foi integrado; o novo PR WebView aguarda teste e autorização do usuário, sem merge.
 
+## 0.7.0 — 2026-10-23
+
+- Celulares usam barra inferior flutuante e sólida com Favoritos, Biblioteca, Início central, Busca e Outros. A pílula de seleção desliza entre as opções, mantendo contraste e movimento reduzido.
+- Outros abre painel inferior acessível com Autores, Séries, Gêneros, Configurações, Administração conforme permissão e Sair; mantém a seleção nas páginas secundárias. Tablet/desktop preservam sua navegação e o leitor continua sem barra de catálogo.
+- Trocas de tela/capítulo no EPUB e de página/tela nos dois modos PDF deslizam lateralmente nos dois sentidos, sem fade e sem transformar o iframe ativo.
+- Preparação limitada de capítulos EPUB, assets e páginas PDF vizinhas; PDF original reutiliza canvas/texto já renderizados. Cache é liberado conforme navegação, contexto e saída, preservando locators, destaques e edição offline.
+
 ## 0.6.1 — 2026-10-23
 
 - Scans usam SHA-256 integral para reconciliar movimentos, sem assumir que um inode reutilizado pertence ao livro anterior; hard links e substituições atômicas não colidem no catálogo.

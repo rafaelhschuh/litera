@@ -12,6 +12,8 @@ import { api } from '../lib/api'
 import { resolveProgressConflict, syncState } from '../lib/offline-sync'
 import { openBookSource, type BookSource, type SourceView } from '../lib/book-source'
 import { attachReaderInput } from '../lib/reader-input'
+import { ReaderPreparation } from '../lib/reader-preparation'
+import type { EpubAppearance } from '../../shared/epub-document'
 import { applyReaderTheme, applyTheme } from '../lib/theme'
 import { fitPdfScale, movePdfSpread, pdfSpreadPages, RenderGeneration, resolvePdfReaderMode, usesTwoPageSpread, usesTwoPageSpreadAtZoom, type PdfReaderMode, type PdfZoomMode } from '../../shared/pdf-reader'
 import { pdfTextSignature, type PdfReflowBlock, type PdfReflowFigure } from '../../shared/pdf-reflow'
@@ -81,6 +83,15 @@ let resizeObserver: ResizeObserver | undefined, pdfjs: any, pdf: any, pdfTextLay
 let bookSource: BookSource | undefined
 const epubViews: Array<SourceView<string> | undefined> = [undefined, undefined]
 let reflowView: SourceView<unknown> | undefined
+type PreparedPdf = { value: { canvas: HTMLCanvasElement; viewport: any; text: any; page: any }; release: () => void }
+const preparedEpub = new ReaderPreparation<SourceView<string>>()
+const preparedReflow = new ReaderPreparation<Awaited<ReturnType<BookSource['reflow']>>>()
+const preparedPdf = new ReaderPreparation<PreparedPdf>()
+let visiblePdf: PreparedPdf[] = [], preparationTimer: number | undefined
+let presentationAnimations: Animation[] = []
+let incomingPresentation: HTMLElement | undefined
+let presentationViewport: HTMLElement | undefined
+let presentationCss: string | undefined
 let pdfLoading: Promise<void> | undefined, pdfLoadingTask: any
 let pdfBase = { width: 1, height: 1 }, pdfPageBase = { width: 1, height: 1 }, pendingLocator: EpubLocator | undefined, saveAfterFrameLoad = false, pendingAnchor = '', pendingChapterEnd = false
 let presentation: HTMLElement | undefined
@@ -194,15 +205,63 @@ function restoreEpub(document: Document, locator?: EpubLocator) {
   resetStageScroll()
 }
 
+function epubAppearance(): EpubAppearance { return { flow: epubFlow.value, fontScale: textScale.value, theme: readerTheme.value, lineHeight: lineHeight.value, margins: margins.value } }
+function chapterUrl(index: number) { return `/api/v1/books/${id}/epub/chapter?href=${encodeURIComponent(toc.value[index]!.href)}` }
+function chapterKey(index: number) { return chapterUrl(index) + JSON.stringify(epubAppearance()) }
+function pdfKey(page: number, scale = zoom.value) { return `${page}:${scale.toFixed(6)}:${devicePixelRatio || 1}` }
+function releasePreparation() {
+  clearTimeout(preparationTimer); preparedEpub.clear(); preparedReflow.clear(); preparedPdf.clear()
+}
+function warmView<T>(view: SourceView<T>, html: string, signal: AbortSignal): SourceView<T> {
+  const controller = new AbortController(), cancel = () => controller.abort()
+  signal.addEventListener('abort', cancel, { once: true })
+  const timeout = window.setTimeout(cancel, 5000)
+  void bookSource!.warmResources(html, controller.signal).catch(() => undefined).finally(() => clearTimeout(timeout))
+  return { ...view, release: () => { cancel(); signal.removeEventListener('abort', cancel); clearTimeout(timeout); view.release() } }
+}
+function prepareNeighbors() {
+  clearTimeout(preparationTimer)
+  // Let visible content settle before spending CPU/IO on optional neighbors.
+  preparationTimer = window.setTimeout(() => {
+    if (unmounting || epubBusy.value || reflowLoading.value || layoutChanging.value) return
+    if (book.value?.format === 'epub') {
+      const neighbors = [currentChapter.value + 1, currentChapter.value - 1].filter(index => index >= 0 && index < toc.value.length)
+      preparedEpub.retain(neighbors.map(chapterKey))
+      for (const index of neighbors) {
+        const preferences = epubAppearance(), key = chapterKey(index), url = chapterUrl(index)
+        preparedEpub.warm(key, async signal => { const view = await bookSource!.chapterHtml(url, preferences, signal); return warmView(view, view.value, signal) })
+      }
+    } else if (readerMode.value === 'reflow') {
+      const neighbors = [currentPage.value + 1, currentPage.value - 1].filter(page => page > 0 && page <= pageCount.value)
+      preparedReflow.retain(neighbors.map(String))
+      for (const page of neighbors) preparedReflow.warm(String(page), async signal => {
+        const view = await bookSource!.reflow(page, signal)
+        const assets = new Set([...(view.value.figures ?? []).map(item => item.asset), ...view.value.blocks.flatMap(block => block.spans.map(span => span.fontAsset))])
+        const html = [...assets].filter(Boolean).map(asset => `<img src="/api/v1/books/${id}/pdf/figure?asset=${encodeURIComponent(asset!)}">`).join('')
+        return warmView(view, html, signal)
+      })
+    } else if (pdf) {
+      const pages = activePdfPages.value, scale = zoom.value
+      const neighbors = [pages[pages.length - 1]! + 1, pages[0]! - 1].filter(page => page > 0 && page <= pageCount.value)
+      preparedPdf.retain(neighbors.map(page => pdfKey(page, scale)))
+      for (const page of neighbors) preparedPdf.warm(pdfKey(page, scale), signal => preparePdfPage(page, scale, signal, true))
+    }
+  }, 180)
+}
+
 async function displayEpub(locator?: EpubLocator, saveAfter = true, atEnd = false) {
   const chapter = toc.value[currentChapter.value]; if (!chapter) return
   const generation = ++epubGeneration
   snapshotEpub(); epubAbort?.abort(); epubAbort = new AbortController(); epubBusy.value = true
   pendingLocator = locator ?? { type: 'epub-cfi', cfi: `epubcfi(/6/${(currentChapter.value + 1) * 2}!/4/2)`, chapterHref: chapter.href, elementIndex: 0, offset: 0 }
   saveAfterFrameLoad = saveAfter; pendingChapterEnd = atEnd
-  const url = `/api/v1/books/${id}/epub/chapter?href=${encodeURIComponent(chapter.href)}&scale=${textScale.value}&theme=${readerTheme.value}&lineHeight=${lineHeight.value}&margins=${margins.value}`
+  const url = chapterUrl(currentChapter.value), key = chapterKey(currentChapter.value)
   try {
-    const view = await bookSource!.chapterHtml(url, { flow: epubFlow.value, fontScale: textScale.value, theme: readerTheme.value, lineHeight: lineHeight.value, margins: margins.value }, epubAbort.signal)
+    bookSource!.assertCurrent()
+    const cached = preparedEpub.take(key)
+    const load = () => bookSource!.chapterHtml(url, epubAppearance(), epubAbort!.signal)
+    const view = await (cached ? cached.catch(load) : load())
+    bookSource!.assertCurrent()
     if (generation !== epubGeneration || unmounting) { view.release(); return }
     const slot = 1 - activeFrame.value
     epubViews[slot]?.release(); epubViews[slot] = view
@@ -211,7 +270,7 @@ async function displayEpub(locator?: EpubLocator, saveAfter = true, atEnd = fals
     log('epub-render-begin', { generation, chapter: currentChapter.value })
   } catch (error) {
     if (generation !== epubGeneration || unmounting) return
-    epubBusy.value = false; presentation?.remove(); syncMessage.value = errorMessage(error); pendingAnchor = ''
+    epubBusy.value = false; clearPresentation(); turnDirection.value = ''; syncMessage.value = errorMessage(error); pendingAnchor = ''
     if (loadedChapter < 0) { message.value = syncMessage.value; state.value = 'error' }
     else { currentChapter.value = loadedChapter; pendingLocator = captureEpub(undefined, false) }
     fallbackReady?.(); fallbackReady = undefined
@@ -287,7 +346,7 @@ async function attachFrame() {
   frameEventCleanup = () => { document.removeEventListener('selectionchange', selection); document.removeEventListener('scroll', scroll, true); document.removeEventListener('click', click); document.removeEventListener('keydown', key) }
   frameInputCleanup = attachReaderInput(document, { onEvent: debug ? event => log(event) : undefined, width: () => document.defaultView?.innerWidth ?? innerWidth, selectionText: () => document.defaultView?.getSelection()?.toString() ?? '', canPan: () => false, canSwipe: () => !epubBusy.value && !panel.value, onTap: handleTap, onSwipe: direction => { void move(direction === 'next' ? 1 : -1) }, onModeChange: setMode })
   await document.fonts?.ready; await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); if (generation !== epubGeneration || unmounting) return; restoreEpub(document, pendingLocator); await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); if (generation !== epubGeneration || unmounting) return; epubBusy.value = false; frameSources.value[1 - activeFrame.value] = ''; applyEpubHighlights(document); captureEpub(document, saveAfterFrameLoad)
-  loadedChapter = currentChapter.value; pendingChapterEnd = false; finishPresentation(); log('epub-render-end', { chapter: currentChapter.value }); fallbackReady?.(); fallbackReady = undefined
+  loadedChapter = currentChapter.value; pendingChapterEnd = false; finishPresentation(); prepareNeighbors(); log('epub-render-end', { chapter: currentChapter.value }); fallbackReady?.(); fallbackReady = undefined
   if (reloadPending) { reloadPending = false; reloadEpub() }
 }
 async function initEpub(saved: any) {
@@ -310,38 +369,71 @@ function twoPagesFitAtZoom(nextZoom = zoom.value) {
   const size = stageSize()
   return usesTwoPageSpreadAtZoom(size.width, size.height, pdfPageBase.width, nextZoom)
 }
+async function preparePdfPage(pageNumber: number, scale: number, signal: AbortSignal, neighbor = false): Promise<PreparedPdf> {
+  const page = await pdf.getPage(pageNumber)
+  if (signal.aborted || unmounting) throw new DOMException('Preparação cancelada.', 'AbortError')
+  const viewport = page.getViewport({ scale }), dpr = Math.max(1, Math.min(3, devicePixelRatio || 1))
+  const output = Math.min(dpr, 8192 / Math.max(viewport.width, viewport.height), Math.sqrt(16_000_000 / (viewport.width * viewport.height)))
+  // Preserve visible render quality. Oversized neighbors use the ordinary path
+  // instead of retaining lower-resolution pixels or an excessive canvas cache.
+  if (neighbor && viewport.width * viewport.height * output * output > 4_000_000) throw new RangeError('Página excede o orçamento de preparação.')
+  const canvas = document.createElement('canvas'), context = canvas.getContext('2d')
+  if (!context) throw new Error('Canvas indisponível para o PDF.')
+  canvas.className = 'pdf-canvas'; canvas.setAttribute('aria-label', `Página ${pageNumber} do PDF`)
+  canvas.width = Math.max(1, Math.floor(viewport.width * output)); canvas.height = Math.max(1, Math.floor(viewport.height * output)); canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`
+  const task = page.render({ canvas, canvasContext: context, viewport, transform: output === 1 ? undefined : [output, 0, 0, output, 0, 0] })
+  const cancel = () => task.cancel(), release = () => { canvas.width = 0; canvas.height = 0; page.cleanup?.() }
+  signal.addEventListener('abort', cancel, { once: true })
+  try {
+    await task.promise
+    const text = await page.getTextContent()
+    bookSource!.assertCurrent()
+    if (signal.aborted || unmounting) throw new DOMException('Preparação cancelada.', 'AbortError')
+    return { value: { canvas, viewport, text, page }, release }
+  } catch (error) { release(); throw error }
+  finally { signal.removeEventListener('abort', cancel) }
+}
 async function renderPdf() {
   if (readerMode.value === 'reflow') return
   await ensurePdf()
   if (!pdf || unmounting || (readerMode.value as PdfReaderMode) === 'reflow') return
-  const requestedPages = activePdfPages.value, tasks: any[] = [], textLayers: any[] = []
-  const generation = renders.begin(() => { for (const task of tasks) task?.cancel?.(); for (const layer of textLayers) layer?.cancel?.() })
+  clearTimeout(preparationTimer)
+  const requestedPages = activePdfPages.value, controller = new AbortController(), textLayers: any[] = [], prepared: PreparedPdf[] = []
+  const generation = renders.begin(() => { controller.abort(); for (const layer of textLayers) layer?.cancel?.() })
+  let committed = false
   log('pdf-render-begin', { generation, pages: requestedPages })
   try {
     const pages = await Promise.all(requestedPages.map(pageNumber => pdf.getPage(pageNumber)))
-    if (!renders.isCurrent(generation)) { for (const page of pages) page.cleanup?.(); return }
+    if (!renders.isCurrent(generation)) return
     const bases = pages.map(page => page.getViewport({ scale: 1 }))
     pdfPageBase = { width: bases[0]!.width, height: bases[0]!.height }
     pdfBase = { width: bases.reduce((total, viewport) => total + viewport.width, 0), height: Math.max(...bases.map(viewport => viewport.height)) }
     fitZoom()
-    const fragment = document.createDocumentFragment(), prepared: Array<{ page: any; layer: HTMLElement; text: any; viewport: any }> = []
-    for (let index = 0; index < pages.length; index++) {
-      const page = pages[index]!, pageNumber = requestedPages[index]!, viewport = page.getViewport({ scale: zoom.value })
-      const dpr = Math.max(1, Math.min(3, devicePixelRatio || 1)), output = Math.min(dpr, 8192 / Math.max(viewport.width, viewport.height), Math.sqrt(16_000_000 / (viewport.width * viewport.height)))
-      const visible = document.createElement('canvas'), context = visible.getContext('2d'); if (!context) throw new Error('Canvas indisponível para o PDF.')
-      visible.className = 'pdf-canvas'; visible.setAttribute('aria-label', `Página ${pageNumber} do PDF`); visible.width = Math.max(1, Math.floor(viewport.width * output)); visible.height = Math.max(1, Math.floor(viewport.height * output)); visible.style.width = `${viewport.width}px`; visible.style.height = `${viewport.height}px`
-      const task = page.render({ canvas: visible, canvasContext: context, viewport, transform: output === 1 ? undefined : [output, 0, 0, output, 0, 0] }); tasks.push(task); await task.promise
+    const scale = zoom.value, fragment = document.createDocumentFragment()
+    for (const pageNumber of requestedPages) {
+      const cached = preparedPdf.take(pdfKey(pageNumber, scale))
+      const load = () => preparePdfPage(pageNumber, scale, controller.signal)
+      const view = await (cached ? cached.catch(load) : load()); prepared.push(view)
+      if (!renders.isCurrent(generation)) return
+      const { canvas, viewport, text } = view.value
       const layer = document.createElement('div'); layer.className = 'textLayer'; layer.dataset.page = String(pageNumber); layer.style.width = `${viewport.width}px`; layer.style.height = `${viewport.height}px`; layer.style.setProperty('--total-scale-factor', String(viewport.scale))
-      const wrapper = document.createElement('section'); wrapper.className = `pdf-page${pdfInvert.value ? ' pdf-page--inverted' : ''}`; wrapper.dataset.page = String(pageNumber); wrapper.setAttribute('aria-label', `Página ${pageNumber}`); wrapper.append(visible, layer); fragment.append(wrapper)
-      prepared.push({ page, layer, text: await page.getTextContent(), viewport })
+      const wrapper = document.createElement('section'); wrapper.className = `pdf-page${pdfInvert.value ? ' pdf-page--inverted' : ''}`; wrapper.dataset.page = String(pageNumber); wrapper.setAttribute('aria-label', `Página ${pageNumber}`); wrapper.append(canvas, layer); fragment.append(wrapper)
+      const textLayer = new pdfjs.TextLayer({ textContentSource: text, container: layer, viewport }); textLayers.push(textLayer)
     }
-    if (!renders.isCurrent(generation) || !pdfSpread.value) { for (const page of pages) page.cleanup?.(); return }
+    if (!renders.isCurrent(generation) || !pdfSpread.value) return
     for (const layer of pdfTextLayers) layer?.cancel?.()
-    if (turnDirection.value) snapshotPdf()
+    if (turnDirection.value && !presentation) snapshotPdf()
     pdfSpread.value.replaceChildren(fragment)
-    for (const item of prepared) { const textLayer = new pdfjs.TextLayer({ textContentSource: item.text, container: item.layer, viewport: item.viewport }); textLayers.push(textLayer); await textLayer.render(); if (!renders.isCurrent(generation)) return }
-    pdfTextLayers = textLayers; applyPdfHighlights(); pinchScale.value = 1; await nextTick(); restoreZoomAnchor(); queue({ format: 'pdf', progressRatio: pageRatio.value, locator: { type: 'pdf-page', page: requestedPages[0]! } }); renders.finish(generation); finishPresentation(); for (const page of pages) page.cleanup?.(); log('pdf-render-end', { generation, pages: requestedPages, zoom: zoom.value })
-  } catch (error: any) { if (error?.name !== 'RenderingCancelledException' && renders.isCurrent(generation)) throw error }
+    // Text-layer metrics require connected DOM.
+    for (const layer of textLayers) { await layer.render(); if (!renders.isCurrent(generation)) return }
+    for (const view of visiblePdf) view.release()
+    visiblePdf = prepared; committed = true
+    pdfTextLayers = textLayers; applyPdfHighlights(); pinchScale.value = 1; await nextTick(); if (!renders.isCurrent(generation) || unmounting) return; restoreZoomAnchor()
+    queue({ format: 'pdf', progressRatio: pageRatio.value, locator: { type: 'pdf-page', page: requestedPages[0]! } })
+    renders.finish(generation); finishPresentation(); prepareNeighbors(); log('pdf-render-end', { generation, pages: requestedPages, zoom: scale })
+  } catch (error: any) {
+    if (!['RenderingCancelledException', 'AbortError'].includes(error?.name) && renders.isCurrent(generation)) { clearPresentation(); throw error }
+  } finally { if (!committed) for (const view of prepared) view.release() }
 }
 async function ensurePdf() {
   if (pdf) return
@@ -452,29 +544,30 @@ function restoreZoomAnchor() {
   container.scrollTop += pageRect.top + anchor.pageY * pageRect.height - (stageRect.top + anchor.localY)
   zoomAnchor = undefined
 }
-function resetStageScroll() { if (stage.value) { stage.value.scrollLeft = 0; stage.value.scrollTop = 0 } }
+function resetStageScroll() { if (stage.value) { stage.value.scrollLeft = 0; stage.value.scrollTop = 0; if (presentation && book.value?.format === 'pdf') { presentation.style.top = '0'; presentation.style.left = '0' } } }
 function attachStage() {
   stageInputCleanup?.(); if (!stage.value) return
-  stageInputCleanup = attachReaderInput(stage.value, { onEvent: debug ? event => log(event) : undefined, width: () => stage.value?.clientWidth ?? innerWidth, selectionText: () => getSelection()?.toString() ?? '', canPan: needsPan, canSwipe: () => readerMode.value === 'visual' && zoomMode.value !== 'manual' && !panel.value, onTap: handleTap, onSwipe: direction => { void move(direction === 'next' ? 1 : -1) }, onPinchStart: startPinch, onPinchChange: changePinch, onPinchEnd: endPinch, onMousePan: (x, y) => { if (stage.value) { stage.value.scrollLeft += x; stage.value.scrollTop += y } }, onModeChange: setMode })
+  stageInputCleanup = attachReaderInput(stage.value, { onEvent: debug ? event => log(event) : undefined, width: () => stage.value?.clientWidth ?? innerWidth, selectionText: () => getSelection()?.toString() ?? '', canPan: needsPan, canSwipe: () => !reflowLoading.value && !panel.value && (readerMode.value === 'reflow' || zoomMode.value !== 'manual'), onTap: handleTap, onSwipe: direction => { void move(direction === 'next' ? 1 : -1) }, onPinchStart: startPinch, onPinchChange: changePinch, onPinchEnd: endPinch, onMousePan: (x, y) => { if (stage.value) { stage.value.scrollLeft += x; stage.value.scrollTop += y } }, onModeChange: setMode })
 }
 
 async function safely(action: () => Promise<void>) { try { await action() } catch (error) { syncMessage.value = errorMessage(error); log('error', { operation: action.name, message: syncMessage.value }) } }
-function snapshotEpub() {
-  presentation?.remove()
+function snapshotEpub(replace = true) {
+  if (replace) { clearPresentation(); if (!turnDirection.value || skipPresentation()) return }
   const doc = frame.value?.contentDocument
   if (!doc?.body || !stage.value) return
   const snapshot = document.createElement('div'); snapshot.className = 'reader-presentation'; snapshot.setAttribute('aria-hidden', 'true')
   const shadow = snapshot.attachShadow({ mode: 'open' })
-  for (const style of doc.querySelectorAll('style')) shadow.append(style.cloneNode(true))
+  for (const style of doc.head.querySelectorAll('style,link[rel="stylesheet"]')) shadow.append(style.cloneNode(true))
   const body = document.createElement('div'); body.style.cssText = `background:${getComputedStyle(doc.body).backgroundColor};color:${getComputedStyle(doc.body).color};position:relative;top:-${doc.defaultView?.scrollY ?? 0}px;min-height:100%`
   for (const child of doc.body.childNodes) body.append(child.cloneNode(true))
-  shadow.append(body); stage.value.append(snapshot); presentation = snapshot
+  shadow.append(body); stage.value.append(snapshot); if (replace) presentation = snapshot
   const pages = shadow.querySelector<HTMLElement>('.reader-pages'); if (pages) pages.scrollLeft = epubPages(doc)?.scrollLeft ?? 0
+  return snapshot
 }
-function snapshotPdf() {
+function snapshotPdf(replace = true) {
   const container = stage.value
   if (!container || !pdfSpread.value?.children.length) return
-  presentation?.remove()
+  if (replace) { clearPresentation(); if (!turnDirection.value || skipPresentation()) return }
   const snapshot = document.createElement('div'); snapshot.className = 'reader-presentation'; snapshot.setAttribute('aria-hidden', 'true')
   snapshot.style.top = `${container.scrollTop}px`; snapshot.style.left = `${container.scrollLeft}px`; snapshot.style.height = `${container.clientHeight}px`; snapshot.style.width = `${container.clientWidth}px`
   const canvas = document.createElement('canvas'); canvas.width = container.clientWidth; canvas.height = container.clientHeight
@@ -485,15 +578,61 @@ function snapshotPdf() {
     const rect = source.getBoundingClientRect()
     context.drawImage(source, rect.left - bounds.left, rect.top - bounds.top, rect.width, rect.height)
   }
-  snapshot.append(canvas); container.append(snapshot); presentation = snapshot
+  snapshot.append(canvas); container.append(snapshot); if (replace) presentation = snapshot
+  return snapshot
+}
+function snapshotReflow(replace = true) {
+  const container = stage.value, content = container?.querySelector('.reader-text-surface')
+  if (!container || !content) return
+  if (replace) { clearPresentation(); if (!turnDirection.value || skipPresentation()) return }
+  const snapshot = document.createElement('div'); snapshot.className = 'reader-presentation reader-presentation--reflow'; snapshot.setAttribute('aria-hidden', 'true')
+  snapshot.style.top = `${container.scrollTop}px`; snapshot.style.height = `${container.clientHeight}px`
+  const shadow = snapshot.attachShadow({ mode: 'open' }), styles = document.createElement('style')
+  if (presentationCss === undefined) {
+    presentationCss = [...document.styleSheets].flatMap(sheet => { try { return [...sheet.cssRules].map(rule => rule.cssText) } catch { return [] } }).join('\n').replaceAll('.reader-document', '.presentation-document')
+  }
+  styles.textContent = presentationCss + '\n.presentation-document{column-count:1!important;column-width:auto!important}'; shadow.append(styles)
+  const clone = content.cloneNode(true) as HTMLElement
+  // Presentation has no reader identity: only the live DOM participates in
+  // coverage checks, selection, locators and highlighting.
+  for (const element of clone.querySelectorAll('[class]')) for (const name of [...element.classList]) if (name.startsWith('reader-document')) element.classList.replace(name, name.replace('reader-document', 'presentation-document'))
+  for (const block of clone.querySelectorAll('[data-reflow-block]')) block.removeAttribute('data-reflow-block')
+  for (const image of clone.querySelectorAll('img')) image.removeAttribute('alt')
+  for (const mark of clone.querySelectorAll<HTMLElement>('mark')) { mark.style.backgroundColor = 'var(--reader-highlight)'; mark.removeAttribute('data-litera-highlight'); mark.removeAttribute('data-highlight-id') }
+  clone.style.position = 'relative'; clone.style.top = `-${container.scrollTop}px`
+  shadow.append(clone); container.append(snapshot); if (replace) presentation = snapshot
+  return snapshot
+}
+function skipPresentation() { return reducedMotion.value || matchMedia('(prefers-reduced-motion: reduce)').matches || !stage.value?.animate || typeof stage.value.attachShadow !== 'function' }
+function clearPresentation() {
+  for (const animation of presentationAnimations) animation.cancel()
+  presentationAnimations = []; presentation?.remove(); incomingPresentation?.remove(); presentationViewport?.remove(); presentation = undefined; incomingPresentation = undefined; presentationViewport = undefined
 }
 function finishPresentation() {
   const outgoing = presentation, direction = turnDirection.value; turnDirection.value = ''
   if (!outgoing) return
-  if (reducedMotion.value || matchMedia('(prefers-reduced-motion: reduce)').matches || !outgoing.animate) { outgoing.remove(); return }
-  const animation = outgoing.animate([{ opacity: 1, transform: 'translateX(0)' }, { opacity: 0, transform: `translateX(${direction === 'prev' ? 18 : -18}px)` }], { duration: 240, easing: 'cubic-bezier(.2,0,0,1)' })
-  const cleanup = () => { outgoing.remove(); if (presentation === outgoing) presentation = undefined }
-  animation.finished.then(cleanup, cleanup)
+  if (!direction || skipPresentation() || !outgoing.animate) { clearPresentation(); return }
+  // Slide two disposable surfaces. The live iframe and its locators never move.
+  const incoming = book.value?.format === 'epub' ? snapshotEpub(false) : readerMode.value === 'reflow' ? snapshotReflow(false) : snapshotPdf(false)
+  if (!incoming) { clearPresentation(); return }
+  incomingPresentation = incoming
+  if (book.value?.format === 'pdf' && stage.value) { outgoing.style.top = `${stage.value.scrollTop}px`; outgoing.style.left = `${stage.value.scrollLeft}px` }
+  const bounds = outgoing.getBoundingClientRect(), width = bounds.width, sign = direction === 'prev' ? -1 : 1
+  // Clip moving snapshots together so animation cannot create horizontal scroll.
+  const viewport = document.createElement('div'); viewport.className = 'reader-transition'; viewport.setAttribute('aria-hidden', 'true')
+  viewport.style.cssText = `top:${outgoing.offsetTop}px;left:${outgoing.offsetLeft}px;width:${width}px;height:${bounds.height}px`
+  for (const surface of [outgoing, incoming]) { surface.style.inset = '0'; surface.style.width = '100%'; surface.style.height = '100%'; viewport.append(surface) }
+  stage.value!.append(viewport); presentationViewport = viewport
+  const tokens = getComputedStyle(document.documentElement), motion = tokens.getPropertyValue('--motion-slow').trim()
+  const duration = parseFloat(motion) * (motion.endsWith('ms') ? 1 : 1000) || 240
+  const options = { duration, easing: tokens.getPropertyValue('--ease-standard').trim() || 'ease-out', fill: 'both' as FillMode }
+  const animations = [
+    outgoing.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${-sign * width}px)` }], options),
+    incoming.animate([{ transform: `translateX(${sign * width}px)` }, { transform: 'translateX(0)' }], options),
+  ]
+  presentationAnimations = animations
+  const cleanup = () => { viewport.remove(); if (presentation === outgoing) { presentation = undefined; incomingPresentation = undefined; presentationViewport = undefined; presentationAnimations = [] } }
+  void Promise.all(animations.map(animation => animation.finished)).then(cleanup, cleanup)
 }
 async function move(delta: number) {
   if (layoutChanging.value) { queuedNavigation = delta; return }
@@ -507,8 +646,9 @@ async function move(delta: number) {
       if (pages) {
         const maximum = Math.max(0, pages.scrollWidth - pages.clientWidth)
         if ((delta > 0 && pages.scrollLeft < maximum - 2) || (delta < 0 && pages.scrollLeft > 2)) {
+          snapshotEpub()
           pages.scrollLeft = Math.min(maximum, Math.max(0, (Math.round(pages.scrollLeft / pages.clientWidth) + delta) * pages.clientWidth))
-          captureEpub(); turnDirection.value = ''; return
+          captureEpub(); finishPresentation(); return
         }
       }
       const maximum = pages ? 0 : Math.max(0, doc.documentElement.scrollHeight - view.innerHeight)
@@ -516,19 +656,20 @@ async function move(delta: number) {
         snapshotEpub(); view.scrollBy(0, delta * Math.max(1, view.innerHeight - 48)); captureEpub(); finishPresentation(); return
       }
     }
-    const next = Math.min(toc.value.length - 1, Math.max(0, currentChapter.value + delta)); if (next === currentChapter.value) return; captureEpub(); currentChapter.value = next; displayEpub(undefined, true, delta < 0) }
+    const next = Math.min(toc.value.length - 1, Math.max(0, currentChapter.value + delta)); if (next === currentChapter.value) { turnDirection.value = ''; return }; captureEpub(); currentChapter.value = next; displayEpub(undefined, true, delta < 0) }
   else if (readerMode.value === 'reflow' && stage.value) {
     const container = stage.value, maximum = Math.max(0, container.scrollHeight - container.clientHeight)
     if ((delta > 0 && container.scrollTop < maximum - 2) || (delta < 0 && container.scrollTop > 2)) {
+      snapshotReflow()
       container.scrollTop = Math.max(0, Math.min(maximum, container.scrollTop + delta * Math.max(1, container.clientHeight - 48)))
-      captureReflow(); turnDirection.value = ''; return
+      captureReflow(); finishPresentation(); return
     }
     const next = Math.min(pageCount.value, Math.max(1, currentPage.value + delta))
     if (next === currentPage.value) { turnDirection.value = ''; return }
     currentPage.value = next
     await safely(() => loadReflow(undefined, delta < 0))
   }
-  else { const next = readerMode.value === 'visual' ? movePdfSpread(currentPage.value, pageCount.value, delta, twoPage.value) : Math.min(pageCount.value, Math.max(1, currentPage.value + delta)); if (next === currentPage.value) return; currentPage.value = next; resetStageScroll(); if (readerMode.value === 'reflow') await safely(loadReflow); else await safely(renderPdf) }
+  else { const next = readerMode.value === 'visual' ? movePdfSpread(currentPage.value, pageCount.value, delta, twoPage.value) : Math.min(pageCount.value, Math.max(1, currentPage.value + delta)); if (next === currentPage.value) { turnDirection.value = ''; return }; snapshotPdf(); currentPage.value = next; resetStageScroll(); if (readerMode.value === 'reflow') await safely(loadReflow); else await safely(renderPdf) }
 }
 async function goToc(item: Chapter) { if (epubBusy.value) return; captureEpub(); const index = toc.value.findIndex(chapter => chapter.href === item.href); if (index >= 0) { currentChapter.value = index; displayEpub(undefined, true) } closePanel() }
 function captureReflow() {
@@ -555,9 +696,13 @@ async function loadReflow(locator?: PdfLocator, atEnd = false) {
   const previous = { locator: reflowLocator, blocks: reflowBlocks.value, figures: reflowFigures.value, view: reflowView, resolver: reflowAssetResolver.value }
   let incoming: SourceView<unknown> | undefined
   let committed = false
+  if (turnDirection.value) snapshotReflow()
   reflowLoading.value = true
   try {
-    const view = await bookSource!.reflow(requestedPage)
+    bookSource!.assertCurrent()
+    const cached = preparedReflow.take(String(requestedPage))
+    const view = await (cached ? cached.catch(() => bookSource!.reflow(requestedPage)) : bookSource!.reflow(requestedPage))
+    bookSource!.assertCurrent()
     incoming = view
     const result = view.value
     if (generation !== reflowGeneration || unmounting) return
@@ -578,23 +723,24 @@ async function loadReflow(locator?: PdfLocator, atEnd = false) {
     if (atEnd && stage.value) stage.value.scrollTop = stage.value.scrollHeight
     reflowView = view; previous.view?.release()
     committed = true
-    finishPresentation()
+    finishPresentation(); prepareNeighbors()
     log('adaptation', { page: requestedPage, adaptation: result.adaptation, visualReference: false })
   } catch (error) {
     if (generation === reflowGeneration && !unmounting) {
       currentPage.value = previous.locator?.page ?? requestedPage; reflowBlocks.value = previous.blocks; reflowFigures.value = previous.figures; reflowAssetResolver.value = previous.resolver
       await nextTick(); restoreReflow(previous.locator)
     }
-    throw error
+    clearPresentation(); turnDirection.value = ''; throw error
   } finally { if (!committed) incoming?.release(); if (generation === reflowGeneration) { reflowLoading.value = false; if (committed) captureReflow() } }
 }
 async function togglePdfMode() {
   captureReflow()
   readerMode.value = readerMode.value === 'visual' ? 'reflow' : 'visual'
   void router.replace({ query: { ...route.query, mode: readerMode.value === 'reflow' ? 'epub' : 'pdf' } })
-  closePanel(false); renders.cancel(); reflowGeneration++; reflowLoading.value = false
+  releasePreparation(); clearPresentation(); closePanel(false); renders.cancel(); reflowGeneration++; reflowLoading.value = false
   reflowBlocks.value = []; reflowFigures.value = []; reflowAssetResolver.value = undefined
   resetStageScroll(); await nextTick()
+  if (readerMode.value === 'reflow') { for (const view of visiblePdf) view.release(); visiblePdf = []; for (const layer of pdfTextLayers) layer?.cancel?.(); pdfTextLayers = [] }
   // The old adapted DOM is gone, so its images/fonts no longer need their URLs.
   reflowView?.release(); reflowView = undefined
   if (unmounting) return
@@ -668,6 +814,7 @@ function scheduleLayout() {
   if (visualViewport && visualViewport.scale !== 1) return
   const width = innerWidth, height = Math.round(visualViewport?.height ?? innerHeight)
   if (layoutSize.width === width && layoutSize.height === height) return
+  releasePreparation(); clearPresentation()
   const generation = ++layoutGeneration
   layoutChanging.value = true; clearTimeout(layoutTimer)
   // Debounce browser chrome/orientation resize bursts; retain the last semantic locator.
@@ -677,7 +824,7 @@ function scheduleLayout() {
     viewportFrame = requestAnimationFrame(async () => {
       if (book.value?.format === 'epub') {
         const doc = frame.value?.contentDocument
-        if (doc && !epubBusy.value && !doc.defaultView?.getSelection()?.toString().trim()) { restoreEpub(doc, pendingLocator); await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); if (generation !== layoutGeneration || unmounting) return; layoutChanging.value = false; captureEpub(doc, false) }
+        if (doc && !epubBusy.value && !doc.defaultView?.getSelection()?.toString().trim()) { restoreEpub(doc, pendingLocator); await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); if (generation !== layoutGeneration || unmounting) return; layoutChanging.value = false; captureEpub(doc, false); prepareNeighbors() }
       } else if (state.value === 'ready' && readerMode.value === 'visual') {
         twoPage.value = zoomMode.value === 'manual' ? twoPagesFitAtZoom() : usesTwoPageSpread(width, height)
         void safely(renderPdf)
@@ -713,7 +860,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   if (book.value?.format === 'epub') captureEpub(); else captureReflow(); unmounting = true; removeEventListener('keydown', onKey); removeEventListener('resize', scheduleLayout); removeEventListener('orientationchange', scheduleLayout); visualViewport?.removeEventListener('resize', scheduleLayout); document.removeEventListener('fullscreenchange', scheduleLayout); document.removeEventListener('visibilitychange', visibility); document.removeEventListener('selectionchange', documentSelection); removeEventListener('pagehide', visibility); removeEventListener('litera-host-pause', visibility); removeEventListener('litera-host-resume', visibility)
-  epubAbort?.abort(); epubGeneration++; presentation?.remove(); resizeObserver?.disconnect(); stageInputCleanup?.(); frameInputCleanup?.(); frameEventCleanup?.(); renders.cancel(); for (const layer of pdfTextLayers) layer?.cancel?.(); reflowGeneration++; searchGeneration++; clearTimeout(chromeTimer); clearTimeout(layoutTimer); cancelAnimationFrame(viewportFrame); cancelAnimationFrame(selectionFrame); bookSource?.dispose(); reflowView = undefined; epubViews.fill(undefined); fallbackReady?.(); fallbackReady = undefined; pdf = undefined; try { void pdfLoadingTask?.destroy?.().catch(() => undefined) } catch { /* deterministic cleanup */ }
+  releasePreparation(); clearPresentation(); for (const view of visiblePdf) view.release(); visiblePdf = []; epubAbort?.abort(); epubGeneration++; resizeObserver?.disconnect(); stageInputCleanup?.(); frameInputCleanup?.(); frameEventCleanup?.(); renders.cancel(); for (const layer of pdfTextLayers) layer?.cancel?.(); reflowGeneration++; searchGeneration++; clearTimeout(chromeTimer); clearTimeout(layoutTimer); cancelAnimationFrame(viewportFrame); cancelAnimationFrame(selectionFrame); bookSource?.dispose(); reflowView = undefined; epubViews.fill(undefined); fallbackReady?.(); fallbackReady = undefined; pdf = undefined; try { void pdfLoadingTask?.destroy?.().catch(() => undefined) } catch { /* deterministic cleanup */ }
   applyReaderTheme()
   document.body.style.overflow = bodyOverflow; document.body.style.overscrollBehavior = bodyOverscroll
 })
@@ -744,7 +891,7 @@ onBeforeUnmount(() => {
         <ReaderSettings v-else-if="panel === 'settings' && book" v-model:line-height="lineHeight" v-model:margins="margins" v-model:invert="pdfInvert" :format="book.format" :epub-flow="epubFlow" :mode="readerMode" :toolbar-position="toolbarPosition" :text-scale="textScale" :theme="readerTheme" :zoom="zoom" :zoom-mode="zoomMode" @epub-flow="setEpubFlow" @toolbar="setToolbarPosition" @mode="togglePdfMode" @text="adjustText" @theme="setTheme" @zoom="adjustZoom" @fit="setZoomMode" @change="changeSetting" @save="persistSettings" @fullscreen="toggleFullscreen" @search="togglePanel('search')" />
         <template v-else><form class="reader-search" @submit.prevent="searchBook"><label for="reader-query">Texto</label><input id="reader-query" v-model="searchQuery" type="search" minlength="2" required /><button class="button button--primary" :disabled="searching">{{ searching ? 'Buscando…' : 'Buscar' }}</button></form><button v-for="result in searchResults" :key="result.href || result.page" @click="openResult(result)"><strong>{{ result.label }}</strong><small>{{ result.excerpt }}</small></button><p v-if="!searchResults.length && !searching && searchQuery">Nenhuma ocorrência encontrada.</p></template>
       </UiDialog>
-      <main ref="stage" :aria-busy="epubBusy || reflowLoading || layoutChanging" class="reader-stage" :class="[turnDirection && `reader-stage--${turnDirection}`, readerMode === 'reflow' && `reader-stage--theme-${readerTheme}`, { 'reader-stage--pdf': book?.format === 'pdf' && readerMode === 'visual', 'reader-stage--reflow': readerMode === 'reflow', 'reader-stage--text': book?.format === 'epub' || readerMode === 'reflow' }]" @scroll.passive="captureReflow"><template v-if="book?.format === 'epub'"><AppState v-if="!frame" class="reader-initial-loading" kind="loading" title="Abrindo capítulo…" /><iframe v-for="(source, slot) in frameSources" :key="slot" class="epub-stage" :class="{ 'epub-stage--preparing': slot !== activeFrame }" :srcdoc="source" :aria-hidden="slot !== activeFrame" :tabindex="slot === activeFrame ? 0 : -1" title="Conteúdo do EPUB" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" @load="prepareFrame($event, slot)" /></template><ReaderTextContent v-else-if="readerMode === 'reflow'" :blocks="reflowBlocks" :loading="reflowLoading" :theme="readerTheme" :content-style="reflowStyle" :figures="reflowFigures" :image-url="`/api/v1/books/${id}/pdf/figure?page=${currentPage}`" :resolve-asset="reflowAssetResolver" /><div v-else ref="pdfSpread" class="pdf-spread" :class="{ 'pdf-spread--pinching': pinchScale !== 1 }" :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})`, transformOrigin: `${pinchOrigin.x}px ${pinchOrigin.y}px` } : undefined" role="group" :aria-label="readerPosition" /></main>
+      <main ref="stage" :aria-busy="epubBusy || reflowLoading || layoutChanging" class="reader-stage" :class="[turnDirection && `reader-stage--${turnDirection}`, readerMode === 'reflow' && `reader-stage--theme-${readerTheme}`, { 'reader-stage--pdf': book?.format === 'pdf' && readerMode === 'visual', 'reader-stage--pdf-fitted': book?.format === 'pdf' && readerMode === 'visual' && zoomMode !== 'manual', 'reader-stage--reflow': readerMode === 'reflow', 'reader-stage--text': book?.format === 'epub' || readerMode === 'reflow' }]" @scroll.passive="captureReflow"><template v-if="book?.format === 'epub'"><AppState v-if="!frame" class="reader-initial-loading" kind="loading" title="Abrindo capítulo…" /><iframe v-for="(source, slot) in frameSources" :key="slot" class="epub-stage" :class="{ 'epub-stage--preparing': slot !== activeFrame }" :srcdoc="source" :aria-hidden="slot !== activeFrame" :tabindex="slot === activeFrame ? 0 : -1" title="Conteúdo do EPUB" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" @load="prepareFrame($event, slot)" /></template><ReaderTextContent v-else-if="readerMode === 'reflow'" :blocks="reflowBlocks" :loading="reflowLoading" :theme="readerTheme" :content-style="reflowStyle" :figures="reflowFigures" :image-url="`/api/v1/books/${id}/pdf/figure?page=${currentPage}`" :resolve-asset="reflowAssetResolver" /><div v-else ref="pdfSpread" class="pdf-spread" :class="{ 'pdf-spread--pinching': pinchScale !== 1 }" :style="pinchScale !== 1 ? { transform: `scale(${pinchScale})`, transformOrigin: `${pinchOrigin.x}px ${pinchOrigin.y}px` } : undefined" role="group" :aria-label="readerPosition" /></main>
     </template>
   </div>
 </template>

@@ -3,7 +3,7 @@
 import { nextTick, ref, useId, watch } from 'vue'
 import UiIcon from './UiIcon.vue'
 
-const props = withDefaults(defineProps<{ open: boolean; title: string; closeLabel?: string }>(), { closeLabel: 'Fechar' })
+const props = withDefaults(defineProps<{ open: boolean; title: string; closeLabel?: string; variant?: 'dialog' | 'sheet' }>(), { closeLabel: 'Fechar', variant: 'dialog' })
 const emit = defineEmits<{ close: [] }>()
 const dialog = ref<HTMLDialogElement>()
 const titleId = useId()
@@ -24,7 +24,7 @@ function containFocus(event: KeyboardEvent) {
 </script>
 
 <template>
-  <dialog ref="dialog" class="dialog" :aria-labelledby="titleId" @keydown="containFocus" @close="emit('close')" @cancel.prevent="emit('close')">
+  <dialog ref="dialog" class="dialog" :class="{ 'dialog--sheet': variant === 'sheet' }" :aria-labelledby="titleId" @click="event => { if (props.variant === 'sheet' && event.target === dialog) emit('close') }" @keydown="containFocus" @close="emit('close')" @cancel.prevent="emit('close')">
     <header>
       <h2 :id="titleId">{{ title }}</h2>
       <button class="icon-button" :aria-label="closeLabel" @click="emit('close')"><UiIcon name="x" /></button>

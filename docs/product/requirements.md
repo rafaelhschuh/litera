@@ -136,3 +136,12 @@ Book files are treated as untrusted input. Parsing, metadata extraction, image p
 - The UI shows actual byte progress, separate validation/cataloging states, cancellation and per-file failures for multiple selection.
 - A durable automatic scan catalogs new uploads, including those arriving during another scan. Resulting books use existing catalog, reader, metadata and authorization paths and survive idempotent rescans.
 - Read-only/unsupported destinations explain how to enable uploads; normal reading remains usable. Source scans never mutate books. Upload requires an online modern admin client; `/legacy` has no upload UI.
+
+### FR-015 — Mobile navigation and responsive reading turns
+
+- On phones below 640px, Favorites, Library, Home, Search and More appear in a solid rounded bottom bar, with Home centered and an obvious sliding active pill. Content reserves bar/safe-area space. Tablet/desktop keep their navigation, and the reader has no catalog bar.
+- More opens a keyboard-accessible bottom sheet containing Authors, Series, Genres, Settings, administrator-only Administration and a separated Sign out. Secondary routes retain More selection, with the current destination identified in the list.
+- EPUB chapter/screen turns and PDF original/adapted turns slide laterally in the navigation direction, with no fade. Swipe, button and keyboard commands share navigation semantics; selection/pinch/panning retain priority.
+- OS/app reduced motion and unavailable animation APIs preserve direct navigation. Live EPUB frames and their locators are never transformed.
+- Adjacent content/resources are optionally prepared in bounded memory, with scale/appearance/context-aware reuse, cleanup on exit/invalidation and normal-load fallback. EPUB/PDF locators, exact highlights, authorization and offline package edition remain authoritative. Preparation does not create offline downloads or advance progress.
+- `/legacy` keeps existing conservative navigation and reading behavior.

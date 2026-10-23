@@ -7,6 +7,7 @@ import { applyTheme, rememberReducedMotion, type AppTheme } from '../lib/theme'
 import UiIcon from '../components/UiIcon.vue'
 import OfflineStatus from '../components/OfflineStatus.vue'
 import RouteContent from '../components/RouteContent.vue'
+import MobileNavigation from '../components/MobileNavigation.vue'
 const open = ref(false); const router = useRouter(); const route = useRoute(); const query = ref(''); const collapsed = ref(false)
 async function logout() { await signOut(); await router.push('/login') }
 function search() { if (query.value.trim()) router.push({ path: '/search', query: { q: query.value.trim() } }) }
@@ -28,5 +29,6 @@ onBeforeUnmount(deactivate)
     <Transition name="backdrop"><button v-if="open" class="drawer-backdrop" aria-label="Fechar navegação" @click="closeNavigation" /></Transition>
     <aside id="primary-navigation" class="sidebar" :class="{ 'sidebar--open': open }"><div><div class="sidebar__heading"><span>Biblioteca</span><button class="icon-button drawer-close" aria-label="Fechar navegação" @click="closeNavigation"><UiIcon name="x" /></button><button class="icon-button collapse-button" :aria-label="collapsed?'Expandir navegação':'Recolher navegação'" @click="toggleCollapsed"><UiIcon :name="collapsed?'chevron-right':'chevron-left'" /></button></div><nav aria-label="Principal" @click="closeNavigation"><RouterLink to="/" title="Início"><UiIcon name="home" /><span>Início</span></RouterLink><RouterLink to="/library" title="Biblioteca"><UiIcon name="library" /><span>Biblioteca</span></RouterLink><RouterLink to="/search" title="Busca"><UiIcon name="search" /><span>Busca</span></RouterLink><p class="nav-label">Explorar</p><RouterLink to="/authors" title="Autores"><UiIcon name="user" /><span>Autores</span></RouterLink><RouterLink to="/series" title="Séries"><UiIcon name="series" /><span>Séries</span></RouterLink><RouterLink to="/genres" title="Gêneros"><UiIcon name="tag" /><span>Gêneros</span></RouterLink><RouterLink to="/favorites" title="Favoritos"><UiIcon name="heart" /><span>Favoritos</span></RouterLink></nav></div><div class="sidebar__account"><RouterLink to="/settings" title="Preferências"><UiIcon name="settings" /><span>Preferências</span></RouterLink><RouterLink v-if="auth.user?.role === 'admin'" to="/admin" title="Administração"><UiIcon name="admin" /><span>Administração</span></RouterLink><button title="Sair" @click="logout"><UiIcon name="logout" /><span>Sair</span></button></div></aside>
     <main id="main" class="page"><OfflineStatus /><RouteContent cache /></main>
+    <MobileNavigation />
   </div>
 </template>

@@ -14,7 +14,7 @@ async function openBook(page: Page, title: string, adapted = false) {
   const detail = await (await page.request.get(`/api/v1/books/${id}`)).json()
   const locator = detail.book.format === 'epub' ? { type: 'epub-cfi', cfi: 'epubcfi(/6/2!/4/2)', chapterHref: 'chapter-1.xhtml', elementIndex: 0, offset: 0 } : { type: 'pdf-page', page: 1 }
   await page.request.put(`/api/v1/books/${id}/progress`, { data: { format: detail.book.format, progressRatio: 0, locator } })
-  const readerLink = page.getByRole('link', { name: /Começar leitura|Continuar leitura/ })
+  const readerLink = page.getByRole('link', { name: /Começar leitura|Continuar leitura|Reler/ })
   if (adapted) await page.goto((await readerLink.getAttribute('href'))!.split('?')[0] + '?mode=epub')
   else await readerLink.click()
 }
@@ -97,6 +97,9 @@ test('PDF: direct adapted opening, readable paragraphs, restore and extracted il
   const pdfRequests: string[] = []
   page.on('request', request => { if (/\/books\/\d+\/(?:content|pdf\/page-image)(?:\?|$)/.test(request.url())) pdfRequests.push(request.url()) })
   await openBook(page, 'Fidelidade PDF', true)
+  // Deny the neighbor before page 2 can prepare it; otherwise a successful
+  // cached page 3 correctly survives the later transport failure.
+  await page.route('**/pdf/reflow?page=3', route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Falha de teste' } }) }))
   await expect(page.locator('.reader-document')).toContainText('INICIO:')
   await expect(page.locator('.reader-document')).toContainText('MEIO:')
   await expect(page.locator('.reader-document')).toContainText('FINAL: capacidade de continuar o paragrafo completo.')
@@ -136,7 +139,6 @@ test('PDF: direct adapted opening, readable paragraphs, restore and extracted il
   await expect(page.getByAltText('Conteúdo visual preservado desta página')).toHaveCount(0)
   await page.screenshot({ path: 'test-results/pdf-adapted-figure-' + test.info().project.name + '.png' })
   while (await stage.evaluate(el => el.scrollTop < el.scrollHeight - el.clientHeight - 2)) await page.keyboard.press('PageDown')
-  await page.route('**/pdf/reflow?page=3', route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Falha de teste' } }) }))
   await page.keyboard.press('PageDown')
   await expect(page.locator('.reader-shell')).toContainText('Falha de teste')
   await expect(page.getByRole('navigation', { name: 'Navegação da leitura' })).toContainText('Página 2 de 3')

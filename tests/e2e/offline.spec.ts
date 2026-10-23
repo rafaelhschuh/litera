@@ -491,6 +491,7 @@ test('offline logout purges account A; account B cannot see or synchronize its b
   await page.goto('/library')
   const menu = page.getByRole('button', { name: 'Abrir navegação', exact: true })
   if (await menu.isVisible()) await menu.click()
+  else if (await page.getByRole('navigation', { name: 'Navegação inferior' }).isVisible()) await page.getByRole('button', { name: 'Outros', exact: true }).click()
   await page.getByRole('button', { name: 'Sair', exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)
   for (const store of ['books', 'resources', 'stages', 'snapshots']) expect((await records<OwnedRecord>(page, booksDatabase, store)).filter(row => row.userId === first.id)).toEqual([])

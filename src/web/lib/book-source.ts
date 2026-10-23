@@ -1,7 +1,7 @@
 import { getOfflineBook, getOfflineResource } from './offline-store'
 import { getOfflineUser, offlineContext } from './offline-context'
 import { api } from './api'
-import { prepareEpubDocument, rewriteCssResources, type EpubAppearance } from '../../shared/epub-document'
+import { cssResourceReferences, prepareEpubDocument, rewriteCssResources, type EpubAppearance } from '../../shared/epub-document'
 import type { PdfReflowBlock, PdfReflowFigure } from '../../shared/pdf-reflow'
 
 type Chapter = { id: string; href: string; label: string }
@@ -88,9 +88,9 @@ export class BookSource {
     return { resolve, load, release }
   }
 
-  private async json<T>(url: string): Promise<T> {
+  private async json<T>(url: string, signal?: AbortSignal): Promise<T> {
     this.assertCurrent()
-    const value = this.local ? JSON.parse(await (await this.blob(url)).text()) : await api<T>(url)
+    const value = this.local ? JSON.parse(await (await this.blob(url)).text()) : await api<T>(url, signal ? { signal } : undefined)
     this.assertCurrent()
     return value
   }
@@ -131,10 +131,48 @@ export class BookSource {
     return { data }
   }
 
-  async reflow(page: number): Promise<SourceView<ReflowPage>> {
+  /** Bounded HTTP-cache hints; local packages already resolve their own assets. */
+  async warmResources(html: string, signal: AbortSignal): Promise<void> {
+    if (this.local) return
+    this.assertCurrent()
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const pending = [...doc.querySelectorAll('img[src],link[rel="stylesheet"][href]')].map(node => node.getAttribute('src') ?? node.getAttribute('href')!)
+    for (const style of doc.querySelectorAll('style,[style]')) pending.push(...cssResourceReferences(style.textContent ?? ''), ...cssResourceReferences(style.getAttribute('style') ?? ''))
+    const seen = new Set<string>()
+    let bytes = 0
+    while (pending.length && seen.size < 12 && bytes < 8 * 1024 * 1024 && !signal.aborted) {
+      const candidate = pending.shift()!
+      let url: string
+      try { url = this.canonical(candidate) } catch { continue }
+      if (seen.has(url)) continue
+      seen.add(url); this.assertCurrent()
+      const response = await fetch(url, { signal, credentials: 'same-origin', headers: this.identity?.userId !== undefined ? { 'X-Litera-User': String(this.identity.userId) } : undefined })
+      this.assertCurrent()
+      if (!response.ok) { await response.body?.cancel(); continue }
+      // Streaming avoids buffering an unexpectedly large illustration merely for a hint.
+      const reader = response.body?.getReader()
+      if (!reader) continue
+      const css: Uint8Array[] = [], isCss = response.headers.get('content-type')?.startsWith('text/css')
+      try {
+        while (!signal.aborted) {
+          const chunk = await reader.read(); if (chunk.done) break
+          bytes += chunk.value.byteLength
+          if (bytes > 8 * 1024 * 1024) { await reader.cancel(); break }
+          if (isCss) css.push(chunk.value)
+        }
+      } finally { reader.releaseLock() }
+      if (isCss && bytes <= 8 * 1024 * 1024) {
+        const content = await new Blob(css as BlobPart[]).text()
+        for (const asset of cssResourceReferences(content)) pending.push(new URL(asset, new URL(url, this.origin)).href)
+      }
+    }
+    this.assertCurrent()
+  }
+
+  async reflow(page: number, signal?: AbortSignal): Promise<SourceView<ReflowPage>> {
     const url = `/api/v1/books/${this.bookId}/pdf/reflow?page=${page}`, scope = this.scope()
     try {
-      const value = await this.json<ReflowPage>(url)
+      const value = await this.json<ReflowPage>(url, signal)
       if (this.local) {
         const assets = new Set([...(value.figures ?? []).map(figure => figure.asset), ...value.blocks.flatMap(block => block.spans.map(span => span.fontAsset))])
         // Sequential reads bound peak memory for image-heavy pages.

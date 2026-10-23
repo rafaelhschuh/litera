@@ -2,7 +2,7 @@
 
 Litera Beta é uma biblioteca digital self-hosted para EPUB e PDF, com múltiplos acervos, jobs de scan, catálogo, metadata resiliente, reader integrado, progresso concorrente por usuário, painel administrativo e um cliente conservador em `/legacy`.
 
-**Versão atual:** `0.6.1` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.6.1`
+**Versão atual:** `0.7.0` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.7.0`
 
 ## Ambiente local com Docker Compose
 
@@ -45,7 +45,7 @@ docker compose down
 
 ## Produção com Docker Compose
 
-O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.6.1`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
+O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.7.0`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
 
 1. crie a pasta `books` ao lado do Compose e copie para ela os arquivos `.epub` e `.pdf`;
 2. troque `CHANGE_ME_BEFORE_DEPLOY` por uma senha inédita de pelo menos 12 caracteres;
@@ -73,9 +73,15 @@ docker compose -f docker-compose.production.yml pull
 docker compose -f docker-compose.production.yml up -d
 ```
 
-O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.6.1` para evitar upgrades implícitos.
+O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.7.0` para evitar upgrades implícitos.
 
 As capas extraídas, enviadas manualmente ou geradas a partir da primeira página de um PDF são armazenadas como JPEG progressivo de até 640 × 960 pixels. O catálogo carrega somente esse derivado e nunca abre o PDF para montar a capa no navegador. Um rescan preenche automaticamente capas ausentes de PDFs já catalogados, mesmo quando o arquivo fonte não mudou. Capas persistidas por versões anteriores são convertidas no primeiro acesso, sem alterar o EPUB/PDF fonte.
+
+## Navegação e leitura — 0.7.0
+
+Em celulares (largura menor que 640 px), a navegação fica em uma barra inferior sólida e arredondada: **Favoritos · Biblioteca · Início · Busca · Outros**. A pílula de seleção desliza entre as opções. **Outros** reúne Autores, Séries, Gêneros, Configurações, Administração para administradores e Sair. A barra respeita a área segura do dispositivo e não aparece no leitor. Tablets mantêm o menu recolhível e desktop mantém a lateral.
+
+O leitor troca páginas com deslizamento lateral, nos dois sentidos, por gesto, botões ou teclado. A preferência de movimento reduzido remove a animação. Capítulos EPUB vizinhos e seus recursos são preparados antecipadamente; páginas do capítulo atual já estão em memória. PDF original prepara canvas e texto das páginas próximas, e o Adaptado prepara texto, figuras e fontes. A preparação é limitada a dois vizinhos por modo, descartada ao sair ou alterar o contexto; falhas usam o carregamento normal. Não cria downloads offline: continua usando a edição salva quando o livro está disponível no dispositivo.
 
 ## Correções do catálogo e leitor — 0.6.1
 
@@ -150,7 +156,7 @@ Para restaurar em caso de rollback, pare o Compose, restaure o tar para um volum
 ## Operação diária
 
 - Scans iniciados pela UI entram em uma fila persistente. Acompanhe contagens e erros em **Administração → Jobs**.
-- Renames/moves são reconciliados por inode e fingerprint amostrado; arquivos fonte nunca são modificados.
+- Renames/moves são reconciliados por fingerprint SHA-256 integral e ausência do caminho anterior; arquivos fonte nunca são modificados.
 - Crie e gerencie contas e libraries liberadas em **Administração → Usuários**. Desativar uma conta revoga sessões imediatamente e preserva progresso.
 - Preferências e troca de senha ficam em **Preferências**. Uma troca de senha revoga as outras sessões.
 - Progresso usa locator por formato e revision. Em conflito, a posição mais nova no servidor é preservada e o reader informa a ocorrência.
