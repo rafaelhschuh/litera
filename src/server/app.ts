@@ -15,6 +15,7 @@ import { ensureOptimizedCover, InvalidCoverError, storeOptimizedCover } from './
 import { hashPassword, openDatabase, verifyPassword, type LiteraDatabase } from './database.js'
 import { extractEpub, readEpubAsset, readEpubChapter, searchEpub } from './epub.js'
 import { validateLibraryPath } from './scanner.js'
+import { receiveBook, uploadFilename, UploadError } from './uploads.js'
 import { createScanJob, enqueueScanJob, mapScanJob, resumeScanJobs, runScanJob } from './jobs.js'
 import { configuredMetadataProvider } from './metadata.js'
 
@@ -165,7 +166,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.5.5', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.6.0', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -493,7 +494,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   app.get('/api/v1/admin/libraries', requireAdmin, (_req, res) => {
     const libraries = db.prepare(`SELECT l.*, COUNT(DISTINCT CASE WHEN f.status='available' THEN f.book_id END) AS bookCount,
       SUM(CASE WHEN f.status='error' THEN 1 ELSE 0 END) AS errorCount FROM libraries l LEFT JOIN book_files f ON f.library_id=l.id GROUP BY l.id ORDER BY l.name`).all()
-    res.json({ libraries: libraries.map((row: any) => ({ ...row, rescanIntervalMinutes: row.rescan_interval_minutes, last_scan_summary: safeJson(row.last_scan_summary) })) })
+    res.json({ maxBookBytes: config.maxBookBytes, libraries: libraries.map((row: any) => ({ ...row, rescanIntervalMinutes: row.rescan_interval_minutes, last_scan_summary: safeJson(row.last_scan_summary) })) })
   })
   app.post('/api/v1/admin/libraries', requireAdmin, (req, res) => {
     const input = librarySchema.safeParse(req.body); if (!input.success) { apiError(res, 400, 'INVALID_LIBRARY', 'Name and filesystem path are required'); return }
@@ -503,7 +504,9 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       res.status(201).json({ library: { id: Number(result.lastInsertRowid), name: input.data.name, path: realPath, rescanIntervalMinutes: input.data.rescanIntervalMinutes } })
     } catch (error) { apiError(res, 400, 'INVALID_LIBRARY_PATH', error instanceof Error ? error.message : 'Invalid library path') }
   })
+  const uploading = new Set<number>()
   app.put('/api/v1/admin/libraries/:id', requireAdmin, (req, res) => {
+    if (uploading.has(Number(req.params.id))) { apiError(res, 409, 'UPLOAD_BUSY', 'Aguarde o envio antes de alterar esta biblioteca.'); return }
     const input = librarySchema.safeParse(req.body); if (!input.success) { apiError(res, 400, 'INVALID_LIBRARY', 'Name and filesystem path are required'); return }
     try {
       const realPath = validateLibraryPath(input.data.path, config)
@@ -511,6 +514,24 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       if (!result.changes) { apiError(res, 404, 'LIBRARY_NOT_FOUND', 'Library not found'); return }
       res.json({ library: { id: Number(req.params.id), name: input.data.name, path: realPath, rescanIntervalMinutes: input.data.rescanIntervalMinutes } })
     } catch (error) { apiError(res, 400, 'INVALID_LIBRARY_PATH', error instanceof Error ? error.message : 'Invalid library path') }
+  })
+  app.post('/api/v1/admin/libraries/:id/upload', requireAdmin, async (req, res, next) => {
+    const libraryId = Number(req.params.id)
+    const library = db.prepare('SELECT path FROM libraries WHERE id=?').get(libraryId) as { path: string } | undefined
+    if (!library) { apiError(res, 404, 'LIBRARY_NOT_FOUND', 'Biblioteca não encontrada.'); return }
+    if (!req.is('application/octet-stream')) { apiError(res, 415, 'INVALID_UPLOAD_TYPE', 'Envie o arquivo como application/octet-stream.'); return }
+    if (uploading.has(libraryId)) { apiError(res, 409, 'UPLOAD_BUSY', 'Há outro envio nesta biblioteca. Aguarde sua conclusão.'); return }
+    uploading.add(libraryId)
+    try {
+      const filename = uploadFilename(req.query.filename)
+      await receiveBook(req, config, library.path, filename)
+      // Force a successor when a running scan has already captured its file list.
+      const job = enqueueScanJob(db, config, libraryId, req.user!.id, true)
+      res.status(201).json({ filename, job })
+    } catch (error) {
+      if (error instanceof UploadError) apiError(res, error.status, error.code, error.message)
+      else next(error)
+    } finally { uploading.delete(libraryId) }
   })
   app.post('/api/v1/admin/libraries/:id/scan', requireAdmin, async (req, res, next) => {
     try {
@@ -647,7 +668,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.5.5', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.6.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

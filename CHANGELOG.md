@@ -7,6 +7,16 @@
 - Workflow adicional para APK debug e validação Android, sem alterar a versão 0.5.5 ou publicação web/container.
 - Contratos Android, ADR e documentação conectados à raiz. O preview nativo rejeitado não foi integrado; o novo PR WebView aguarda teste e autorização do usuário, sem merge.
 
+## 0.6.0 — 2026-10-23
+
+- Indicador animado desde o HTML inicial e durante login, com preparação antecipada da Home, capas e detalhes de livros próximos da área visível, sem baixar livros completos; cache e concorrência limitados por conta.
+
+- Catálogo preserva telas recentes, filtros, busca e rolagem ao navegar e retornar do leitor; dados são revalidados sem apagar o conteúdo visível, com proteção contra respostas fora de ordem e isolamento por conta.
+- Transições curtas de telas, menus e diálogos, carregamento contextual, aparecimento suave de capas e carregamento antecipado de código ao indicar intenção de navegar. Movimento reduzido é aplicado desde a inicialização.
+- Admin pode enviar vários EPUBs/PDFs na página de uma biblioteca, com progresso real, validação, cancelamento e acompanhamento da catalogação automática.
+- Upload em streaming, limite de tamanho, validação de conteúdo, nomes sem traversal e publicação atômica sem substituir arquivos. Scans em andamento recebem um sucessor para incluir novos uploads.
+- Compose monta livros com escrita para uploads; scanner continua sem alterar fontes. Sem migrations nem mudanças no cliente legacy.
+
 ## 0.5.5 — 2026-10-20
 
 - Sincronização automática de leitura passa a ser silenciosa, sem avisos de envio, contagem de pendências ou confirmação; erros e conflitos continuam acionáveis.

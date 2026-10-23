@@ -13,7 +13,7 @@ services:
       LITERA_MAX_BOOK_MB: "${LITERA_MAX_BOOK_MB:-512}"
     volumes:
       - litera_data:/data
-      - "${LITERA_BOOKS_PATH:-./books}:/books:ro"
+      - "${LITERA_BOOKS_PATH:-./books}:/books"
     restart: unless-stopped
     stop_grace_period: 15s
     healthcheck:

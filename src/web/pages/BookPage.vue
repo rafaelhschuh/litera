@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import PageRefresh from '../components/PageRefresh.vue'
+import { usePageData } from '../lib/page-data'
+import { preparedBook } from '../lib/catalog-warmup'
 import AppState from '../components/AppState.vue'
 import BookCover from '../components/BookCover.vue'
 import BookProgress from '../components/BookProgress.vue'
@@ -10,10 +13,16 @@ import RatingStars from '../components/RatingStars.vue'
 import { api } from '../lib/api'
 import { syncState } from '../lib/offline-sync'
 
-const route=useRoute();const book=ref<any>();const highlights=ref<any[]>([]);const state=ref<'loading'|'loaded'|'error'>('loading');const notice=ref(''), error=ref(''), busy=ref(false)
-async function load(){try{const [bookResult,highlightResult]=await Promise.all([api<{book:any}>(`/api/v1/books/${route.params.id}`),api<{highlights:any[]}>(`/api/v1/books/${route.params.id}/highlights`)]);book.value=bookResult.book;highlights.value=highlightResult.highlights;state.value='loaded'}catch{state.value='error'}}
-onMounted(load)
-watch(()=>syncState.online,load)
+const route = useRoute()
+// A cached detail must stay bound to its own book when the active route changes.
+const id = Number(route.params.id)
+const { data, state, error: loadError, refreshing, refresh: load } = usePageData(async () => {
+  const [bookResult, highlightResult] = await Promise.all([api<{book:any}>(`/api/v1/books/${id}`), api<{highlights:any[]}>(`/api/v1/books/${id}/highlights`)])
+  return { book: bookResult.book, highlights: highlightResult.highlights }
+}, preparedBook(id))
+const book = computed(() => data.value?.book)
+const highlights = computed({ get: () => data.value?.highlights ?? [], set: value => { if (data.value) data.value = { ...data.value, highlights: value } } })
+const notice = ref(''), error = ref(''), busy = ref(false)
 async function change(action:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';notice.value='';try{await action()}catch(reason){error.value=reason instanceof Error?reason.message:'Não foi possível salvar a alteração. Tente novamente.'}finally{busy.value=false}}
 async function favorite(){await change(async()=>{const value=!book.value.favorite;await api(`/api/v1/books/${book.value.id}/favorite`,{method:value?'PUT':'DELETE'});book.value.favorite=value;notice.value=value?'Adicionado aos favoritos.':'Removido dos favoritos.'})}
 async function reopen(){await change(async()=>{await api(`/api/v1/books/${book.value.id}/reopen`,{method:'POST'});book.value.completed=false;notice.value='Livro reaberto para continuar a leitura.'})}
@@ -24,11 +33,12 @@ async function rateHighlight(highlight:any,rating:number){await change(async()=>
 
 <template>
   <AppState v-if="state==='loading'" kind="loading" />
-  <AppState v-else-if="state==='error'" kind="error" title="Livro indisponível" :message="!syncState.online ? 'Este livro não está disponível offline. Conecte-se para abri-lo e salvar um download.' : 'Ele pode ter sido removido do acervo ou não estar liberado para sua conta.'" />
-  <article v-else class="book-detail">
+  <AppState v-else-if="state==='error'" kind="error" title="Livro indisponível" :message="!syncState.online ? 'Este livro não está disponível offline. Conecte-se para abri-lo e salvar um download.' : 'Ele pode ter sido removido do acervo ou não estar liberado para sua conta.'"><button class="text-link" @click="load">Tentar novamente</button></AppState>
+  <article v-else class="book-detail" :aria-busy="refreshing">
     <RouterLink class="back-link" to="/library">← Biblioteca</RouterLink>
     <BookCover :id="book.id" :title="book.title" :author="book.author" :has-cover="book.hasCover" :format="book.format" />
     <div class="book-detail__copy">
+      <PageRefresh :busy="refreshing" :error="loadError" @retry="load" />
       <p class="eyebrow">{{ book.format.toUpperCase() }}</p><h1>{{ book.title }}</h1>
       <p class="book-author"><RouterLink v-if="book.author" :to="`/authors/${encodeURIComponent(book.author)}`">{{ book.author }}</RouterLink><span v-else>Autor desconhecido</span></p>
       <div class="book-rating"><span>Sua avaliação</span><RatingStars :model-value="book.userRating||0" :disabled="busy || !syncState.online" label="Avaliação do livro" @update:model-value="rateBook" /><small v-if="!syncState.online">Avaliações requerem conexão.</small></div>

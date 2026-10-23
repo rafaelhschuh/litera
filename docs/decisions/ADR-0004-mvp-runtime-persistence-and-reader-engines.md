@@ -25,3 +25,7 @@ O MVP precisa ser instalável por Docker Compose, persistir catálogo/sessões/p
 - O domínio/API não depende de SQLite, Vue ou storage do browser; uma migração futura continua possível.
 - O cliente legacy permanece pequeno e não carrega Vue/PDF.js/EPUB.js.
 - O fallback EPUB troca fidelidade avançada por leitura segura e incremental em arquivos sem navegação ou em falhas de inicialização, sem transformar percentage na chave de restauração.
+
+## 0.6 update
+
+[ADR-0011](ADR-0011-navigation-continuity-and-book-upload.md) permits administrative creation of new books in a writable source mount. Existing source files and the scanner remain read-only in behavior; uploads never replace an existing file.

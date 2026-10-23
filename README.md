@@ -2,7 +2,7 @@
 
 Litera Beta é uma biblioteca digital self-hosted para EPUB e PDF, com múltiplos acervos, jobs de scan, catálogo, metadata resiliente, reader integrado, progresso concorrente por usuário, painel administrativo e um cliente conservador em `/legacy`.
 
-**Versão atual:** `0.5.5` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.5.5`
+**Versão atual:** `0.6.0` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.6.0`
 
 ## Ambiente local com Docker Compose
 
@@ -30,7 +30,7 @@ docker compose ps
 curl --fail http://localhost:3000/health
 ```
 
-Abra `http://localhost:3000`, entre com `LITERA_ADMIN_USERNAME` e `LITERA_ADMIN_PASSWORD`, acesse **Administração → Bibliotecas**, cadastre uma biblioteca com o caminho **`/books`** e clique em **Escanear agora**. O mount é somente leitura; o scanner nunca altera os livros fonte. Catálogo, capas extraídas e progresso ficam no volume persistente `litera_data`.
+Abra `http://localhost:3000`, entre com `LITERA_ADMIN_USERNAME` e `LITERA_ADMIN_PASSWORD`, acesse **Administração → Bibliotecas**, cadastre uma biblioteca com o caminho **`/books`** e clique em **Escanear agora**. O scanner nunca altera os livros fonte. O mount permite criar novos EPUBs/PDFs pelo upload administrativo; arquivos existentes nunca são substituídos. Catálogo, capas extraídas e progresso ficam no volume persistente `litera_data`.
 
 O administrador é criado somente quando o banco está vazio. Alterar as variáveis depois do primeiro bootstrap não troca a senha existente. Não há senha padrão armazenada no repositório.
 
@@ -45,7 +45,7 @@ docker compose down
 
 ## Produção com Docker Compose
 
-O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.5.5`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
+O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.6.0`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
 
 1. crie a pasta `books` ao lado do Compose e copie para ela os arquivos `.epub` e `.pdf`;
 2. troque `CHANGE_ME_BEFORE_DEPLOY` por uma senha inédita de pelo menos 12 caracteres;
@@ -62,7 +62,7 @@ docker compose -f docker-compose.production.yml ps
 curl --fail http://localhost:3000/health
 ```
 
-A aplicação é publicada na porta `3000`. O volume nomeado `litera_data` preserva banco SQLite, WAL, capas, configurações, usuários e progresso em `/data`. A pasta `./books` é montada em `/books` como somente leitura, portanto trocar ou recriar o container não remove os livros nem permite que o scanner os altere.
+A aplicação é publicada na porta `3000`. O volume nomeado `litera_data` preserva banco SQLite, WAL, capas, configurações, usuários e progresso em `/data`. A pasta `./books` é montada em `/books` com escrita para uploads administrativos. Trocar ou recriar o container preserva os livros; o scanner continua sem modificá-los.
 
 As variáveis do processo ficam declaradas diretamente em `environment`: `NODE_ENV`, `PORT`, `LITERA_DATA_DIR`, `LITERA_BOOK_ROOTS`, credenciais do administrador inicial, origem/cookies, configuração opcional da Open Library, limite de tamanho e identificação do build. O administrador só é criado quando o banco está vazio; alterar a senha no Compose depois disso não troca a credencial já persistida.
 
@@ -73,9 +73,19 @@ docker compose -f docker-compose.production.yml pull
 docker compose -f docker-compose.production.yml up -d
 ```
 
-O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.5.5` para evitar upgrades implícitos.
+O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.6.0` para evitar upgrades implícitos.
 
 As capas extraídas, enviadas manualmente ou geradas a partir da primeira página de um PDF são armazenadas como JPEG progressivo de até 640 × 960 pixels. O catálogo carrega somente esse derivado e nunca abre o PDF para montar a capa no navegador. Um rescan preenche automaticamente capas ausentes de PDFs já catalogados, mesmo quando o arquivo fonte não mudou. Capas persistidas por versões anteriores são convertidas no primeiro acesso, sem alterar o EPUB/PDF fonte.
+
+## Upload e navegação — 0.6.0
+
+Em **Administração → Bibliotecas → abrir uma biblioteca → Enviar livros**, selecione um ou mais EPUBs/PDFs e envie. Cada arquivo mostra progresso real de transferência, validação e catalogação. Os novos livros aparecem no catálogo depois do scan automático; falhas de catalogação ficam em **Jobs**. Arquivos vazios, corrompidos, protegidos por senha, formatos não suportados e nomes com pastas são rejeitados. O limite por arquivo é `LITERA_MAX_BOOK_MB` (default 512 MB). Um nome já existente retorna conflito sem substituir o original.
+
+A pasta da biblioteca precisa permitir escrita pelo usuário `node` do container (UID 1000), com suporte a hard links para publicação atômica. Os Compose desta versão montam `/books` com escrita; instalações que preservarem `:ro` continuam lendo normalmente e recebem uma mensagem ao tentar enviar. Ajuste as permissões da pasta no host conforme sua política. O upload cria somente arquivos novos; scans nunca modificam fontes. Faça backup da pasta `books` junto com o volume de dados. Envio exige conexão e administrador, e não está disponível em `/legacy`.
+
+A abertura e o login exibem um indicador animado; após autenticar, o app prepara a Home, capas e detalhes dos primeiros livros com prazo limitado. Outros livros são preparados ao se aproximarem da área visível durante a rolagem ou ao apontar/focar um card. A preparação não baixa EPUBs/PDFs completos nem cria downloads offline.
+
+O catálogo moderno preserva até 12 telas recentes por conta, filtros, busca e posição de rolagem enquanto o aplicativo permanece aberto, inclusive ao retornar do leitor. A atualização acontece mantendo o último conteúdo visível, com erro e retry no contexto. Transições de telas, capas, menus e painéis usam os tokens de movimento e respeitam **Reduzir movimento** e a preferência do sistema. O leitor conserva seus locators e ciclo de descarte; sair da conta descarta as telas privadas retidas. `/legacy` mantém sua navegação conservadora.
 
 ## Cliente legacy
 
@@ -117,7 +127,7 @@ docker compose down
 docker run --rm -v litera_litera_data:/data -v "$PWD:/backup" alpine tar czf /backup/litera-backup-before-beta.tar.gz -C /data .
 ```
 
-Se o projeto/volume tiver outro nome, confirme com `docker volume ls` e substitua `litera_litera_data`. O backup contém banco, WAL e capas; os livros permanecem no mount read-only e devem seguir a política de backup do host.
+Se o projeto/volume tiver outro nome, confirme com `docker volume ls` e substitua `litera_litera_data`. O backup contém banco, WAL e capas; os livros ficam na pasta montada e devem seguir a política de backup do host, incluindo os arquivos enviados pelo admin.
 
 2. Atualize os arquivos/imagem e suba normalmente:
 

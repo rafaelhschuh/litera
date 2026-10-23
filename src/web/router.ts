@@ -1,10 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { nextTick, watch } from 'vue'
 import { auth } from './lib/auth'
 import AppShell from './shells/AppShell.vue'
 import AdminShell from './shells/AdminShell.vue'
 
+const positions = new Map<string, { left: number; top: number }>()
+watch(() => auth.user?.id, () => positions.clear())
+
 export const router = createRouter({
   history: createWebHistory(),
+  async scrollBehavior(to, from, saved) {
+    if (to.path === from.path) return false
+    await nextTick()
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    return saved ?? positions.get(to.fullPath) ?? { left: 0, top: 0 }
+  },
   routes: [
     { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { public: true } },
     { path: '/read/:id', component: () => import('./pages/ReaderPage.vue') },
@@ -35,8 +45,21 @@ export const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach((to, from) => {
+  if (to.path !== from.path) {
+    positions.set(from.fullPath, { left: window.scrollX, top: window.scrollY })
+    if (positions.size > 60) positions.delete(positions.keys().next().value!)
+  }
   if (!to.meta.public && !auth.user) return { path: '/login', query: { next: to.fullPath } }
   if (to.meta.admin && auth.user?.role !== 'admin') return '/'
   if (to.path === '/login' && auth.user) return '/'
+})
+
+router.afterEach(async (to, from, failure) => {
+  if (failure || to.path === from.path) return
+  await nextTick()
+  requestAnimationFrame(() => {
+    const heading = document.querySelector<HTMLElement>('#main h1')
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }) }
+  })
 })

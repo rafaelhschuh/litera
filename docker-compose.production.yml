@@ -1,6 +1,6 @@
 services:
   litera:
-    image: ghcr.io/rafaelhschuh/litera:0.5.5
+    image: ghcr.io/rafaelhschuh/litera:0.6.0
     ports:
       - "3000:3000"
     environment:
@@ -15,10 +15,10 @@ services:
       LITERA_OPENLIBRARY_ENABLED: "false"
       LITERA_OPENLIBRARY_CONTACT: ""
       LITERA_MAX_BOOK_MB: "512"
-      LITERA_BUILD: "0.5.5"
+      LITERA_BUILD: "0.6.0"
     volumes:
       - litera_data:/data
-      - ./books:/books:ro
+      - ./books:/books
     restart: unless-stopped
     stop_grace_period: 15s
     healthcheck:

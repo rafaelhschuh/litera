@@ -8,7 +8,7 @@ import UiToast from '../components/UiToast.vue'
 import OfflineStorage from '../components/OfflineStorage.vue'
 import { api } from '../lib/api'
 import { syncState } from '../lib/offline-sync'
-import { rememberTheme, type AppTheme } from '../lib/theme'
+import { rememberTheme, rememberReducedMotion, type AppTheme } from '../lib/theme'
 import { installPwa, pwaInstall } from '../lib/pwa'
 import { hasAndroidHost, openAndroidSettings } from '../lib/android-host'
 
@@ -18,8 +18,8 @@ const loading = ref(true); const error = ref(''); const notice = ref('')
 const preferences = reactive({ theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false })
 const currentPassword = ref(''); const newPassword = ref('')
 function previewTheme(theme: AppTheme){ preferences.appTheme=theme; rememberTheme(theme) }
-onMounted(async () => { try { Object.assign(preferences, (await api<any>('/api/v1/settings')).preferences); previewTheme(preferences.appTheme as AppTheme); document.documentElement.dataset.reducedMotion=String(preferences.reducedMotion) } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Falha ao carregar.' } finally { loading.value = false } })
-async function save() { try { await api('/api/v1/settings', { method: 'PUT', body: JSON.stringify(preferences) }); previewTheme(preferences.appTheme as AppTheme); document.documentElement.dataset.reducedMotion=String(preferences.reducedMotion); notice.value = 'Preferências salvas.'; error.value = '' } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Falha ao salvar.' } }
+onMounted(async () => { try { Object.assign(preferences, (await api<any>('/api/v1/settings')).preferences); previewTheme(preferences.appTheme as AppTheme); rememberReducedMotion(preferences.reducedMotion) } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Falha ao carregar.' } finally { loading.value = false } })
+async function save() { try { await api('/api/v1/settings', { method: 'PUT', body: JSON.stringify(preferences) }); previewTheme(preferences.appTheme as AppTheme); rememberReducedMotion(preferences.reducedMotion); notice.value = 'Preferências salvas.'; error.value = '' } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Falha ao salvar.' } }
 async function changePassword() { try { await api('/api/v1/account/password', { method: 'PUT', body: JSON.stringify({ currentPassword: currentPassword.value, newPassword: newPassword.value }) }); currentPassword.value = ''; newPassword.value = ''; notice.value = 'Senha alterada e outras sessões revogadas.'; error.value = '' } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Falha ao alterar a senha.' } }
 async function install(){try{const installed=await installPwa();notice.value=installed?'Litera instalado como aplicativo.':'O navegador ainda não liberou a instalação neste dispositivo.'}catch{error.value='Não foi possível abrir a instalação. Tente pelo menu do navegador.'}}
 </script>

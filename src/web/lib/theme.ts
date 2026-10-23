@@ -34,7 +34,13 @@ export function applyTheme(theme: AppTheme): void {
   updateBrowserTheme()
 }
 
+export function rememberReducedMotion(reduced: boolean): void {
+  document.documentElement.dataset.reducedMotion = String(reduced)
+  try { localStorage.setItem('litera-reduced-motion', String(reduced)) } catch { /* Optional device preference. */ }
+}
+
 export function initializeTheme(): void {
+  try { document.documentElement.dataset.reducedMotion = localStorage.getItem('litera-reduced-motion') ?? 'false' } catch { /* Optional device preference. */ }
   media = window.matchMedia('(prefers-color-scheme: dark)')
   let cached: string | null = null
   try { cached = window.localStorage.getItem('litera-theme') } catch { /* Storage is optional for online reading. */ }

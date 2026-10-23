@@ -323,6 +323,7 @@ Não usar sombra apenas para “deixar bonito”.
 motion-fast   = 120ms
 motion-normal = 180ms
 motion-slow   = 240ms
+motion-loading = 800ms (ciclo de atividade)
 ```
 
 - sem animações longas;
@@ -1343,3 +1344,12 @@ Uma tela não está pronta até:
 
 > Antes de desenhar uma tela nova, componha-a com peças existentes. Antes de criar uma peça nova, verifique se o problema realmente é novo. Antes de adicionar um valor visual, procure o token semântico correspondente. O Litera deve parecer um único produto, independentemente de qual módulo ou programador implementou cada tela.
 
+
+## 0.6 — Continuidade e envio de livros
+
+- Moderno: até 12 telas de catálogo/detalhe retidas por conta e role, filtros/resultados e rolagem preservados ao voltar, inclusive do reader. Reader e formulários administrativos conservam seu ciclo normal de descarte.
+- Revalidação preserva conteúdo; erros têm retry no contexto e autorização/not-found remove dados antigos. Respostas fora de ordem não substituem resultados novos. Loading inicial de catálogo usa `AppState layout="catalog"`; atividade de atualização só aparece após `motion-normal`.
+- Entrada de tela: opacity + deslocamento `space-2`, duração `motion-normal`, easing padrão; saída imediata evita intervalo vazio. Capas, backdrop e diálogo seguem os mesmos tokens. Sistema e override de movimento reduzido removem os efeitos; nenhum efeito é necessário ao core legacy.
+- Library Detail inclui **Enviar livros**, seleção múltipla EPUB/PDF, limite vindo da API, progresso real por arquivo, validação e catalogação separadas, cancelamento e link Jobs. Colisões, falta de escrita, tamanho e arquivo inválido têm erro acionável sem substituir fontes.
+
+- Abertura mostra spinner desde o HTML/CSS inicial. Login mostra conexão e preparação; prepara a Home e os dois primeiros livros antes de navegar, com deadline e fallback normal. Cards próximos da área visível preparam capas/detalhes gradualmente, com concorrência/cache limitados e isolamento por conta.

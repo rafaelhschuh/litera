@@ -11,14 +11,14 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=3000 LITERA_DATA_DIR=/data LITERA_BOOK_ROOTS=/books
 WORKDIR /app
 LABEL org.opencontainers.image.title="Litera" \
-      org.opencontainers.image.version="0.5.5" \
+      org.opencontainers.image.version="0.6.0" \
       org.opencontainers.image.licenses="GPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/rafaelhschuh/litera"
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/legacy ./src/legacy
-RUN mkdir -p /data /books && chown node:node /data
+RUN mkdir -p /data /books && chown node:node /data /books
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \

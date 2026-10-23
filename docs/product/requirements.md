@@ -114,3 +114,19 @@ Reading history and progress are user data. External metadata providers must rec
 
 ### NFR-006 — Security
 Book files are treated as untrusted input. Parsing, metadata extraction, image processing, authentication, authorization, path handling, and external requests require defensive controls.
+
+### FR-013 — Continuous modern navigation
+
+- Returning to a recent catalog screen preserves filters, search, pagination and document scroll while the app remains open, including after leaving a reader.
+- Refreshing existing results does not replace them with an empty/loading screen; failures retain usable results with contextual retry except authorization/not-found responses.
+- Stale asynchronous responses cannot replace newer results. Retained screens are bounded and isolated by account/role; logout clears them.
+- Short optional transitions respect system and application reduced-motion settings. Reader locator/restoration semantics and legacy core flows remain intact.
+
+### FR-014 — Administrative book upload
+
+- An authenticated administrator can send EPUB/PDF files from a specific library's admin detail page; readers, unauthenticated users and mismatched account requests cannot upload.
+- Each transfer enforces the configured maximum size, including chunked bodies. Empty/corrupt/protected/unsupported files and path-bearing filenames are rejected.
+- Valid new files are published completely within the configured allowed library root, without overwriting any existing file or symlink. Failure/interruption removes request staging files.
+- The UI shows actual byte progress, separate validation/cataloging states, cancellation and per-file failures for multiple selection.
+- A durable automatic scan catalogs new uploads, including those arriving during another scan. Resulting books use existing catalog, reader, metadata and authorization paths and survive idempotent rescans.
+- Read-only/unsupported destinations explain how to enable uploads; normal reading remains usable. Source scans never mutate books. Upload requires an online modern admin client; `/legacy` has no upload UI.

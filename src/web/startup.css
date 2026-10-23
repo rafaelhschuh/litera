@@ -1,0 +1,10 @@
+/* Loaded directly by HTML so the startup indicator does not wait for JavaScript. */
+body{margin:0}
+.loading-spinner{display:inline-block;flex:none;width:var(--space-5,24px);height:var(--space-5,24px);border:3px solid var(--border-strong,rgba(52,47,42,.18));border-top-color:var(--accent,#74394b);border-radius:50%;animation:loading-spin var(--motion-loading,800ms) linear infinite}
+@keyframes loading-spin{to{transform:rotate(1turn)}}
+.app-start{display:grid;place-content:center;justify-items:center;gap:var(--space-5,24px);min-height:100vh;padding:var(--space-6,32px);box-sizing:border-box;color:var(--text-secondary,#68645e);background:var(--bg,#f5f4f1);font-family:"Avenir Next",Avenir,"Segoe UI",sans-serif;text-align:center}
+.app-start>.wordmark{color:var(--accent,#74394b);font:700 var(--text-xl,22px) Georgia,serif;letter-spacing:.19em}
+.app-start p{margin:0}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .app-start{color:#b8b3ab;background:#191918}}
+@media(prefers-reduced-motion:reduce){.loading-spinner{animation:none}}
+:root[data-reduced-motion="true"] .loading-spinner{animation:none}

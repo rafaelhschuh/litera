@@ -28,13 +28,13 @@ Na instalação das dependências de sistema do Playwright, o CI substitui o mir
 
 `.github/workflows/container.yml` publica `ghcr.io/rafaelhschuh/litera:main` e `sha-<commit>` em pushes para `main`, usando `GITHUB_TOKEN` com `packages: write`.
 
-`.github/workflows/release.yml` roda para tags `v*.*.*`, exige que a tag corresponda à versão de `package.json`, repete todos os gates, publica as tags semânticas da imagem e só então cria a GitHub Release. Para `v0.5.5`, as tags são `0.5.5`, `0.5`, `0` e `latest`.
+`.github/workflows/release.yml` roda para tags `v*.*.*`, exige que a tag corresponda à versão de `package.json`, repete todos os gates, publica as tags semânticas da imagem e só então cria a GitHub Release. Para `v0.6.0`, as tags são `0.6.0`, `0.6`, `0` e `latest`.
 
 Processo de release:
 
 ```bash
-git tag -a v0.5.5 -m "Litera 0.5.5"
-git push origin v0.5.5
+git tag -a v0.6.0 -m "Litera 0.6.0"
+git push origin v0.6.0
 ```
 
 ## Android preview

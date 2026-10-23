@@ -6,9 +6,9 @@ import UiField from '../../components/UiField.vue'
 import UiDialog from '../../components/UiDialog.vue'
 import { api } from '../../lib/api'
 
-const users = ref<any[]>([]); const libraries = ref<any[]>([]); const loading = ref(true); const error = ref(''); const notice = ref(''); const showCreate = ref(false)
+const users = ref<any[]>([]); const libraries = ref<any[]>([]); const loaded=ref(false);const loading = ref(true); const error = ref(''); const notice = ref(''); const showCreate = ref(false)
 const form = reactive({ username: '', displayName: '', password: '', role: 'reader', libraryIds: [] as number[] })
-async function load(){loading.value=true;try{const [userResult,libraryResult]=await Promise.all([api<any>('/api/v1/admin/users'),api<any>('/api/v1/admin/libraries')]);users.value=userResult.users;libraries.value=libraryResult.libraries;error.value=''}catch(reason){error.value=reason instanceof Error?reason.message:'Falha ao carregar.'}finally{loading.value=false}}
+async function load(){loading.value=!loaded.value;try{const [userResult,libraryResult]=await Promise.all([api<any>('/api/v1/admin/users'),api<any>('/api/v1/admin/libraries')]);users.value=userResult.users;libraries.value=libraryResult.libraries;error.value='';loaded.value=true}catch(reason){error.value=reason instanceof Error?reason.message:'Falha ao carregar.'}finally{loading.value=false}}
 async function create(){try{await api('/api/v1/admin/users',{method:'POST',body:JSON.stringify(form)});Object.assign(form,{username:'',displayName:'',password:'',role:'reader',libraryIds:[]});showCreate.value=false;notice.value='Usuário criado.';await load()}catch(reason){error.value=reason instanceof Error?reason.message:'Falha ao criar usuário.'}}
 async function setActive(user:any){try{await api(`/api/v1/admin/users/${user.id}`,{method:'PUT',body:JSON.stringify({active:!user.active})});notice.value=user.active?'Usuário desativado e sessões revogadas.':'Usuário reativado.';await load()}catch(reason){error.value=reason instanceof Error?reason.message:'Falha ao atualizar usuário.'}}
 function edit(user:any){user.editing=!user.editing;user.editRole=user.role;user.editLibraryIds=[...user.libraryIds];user.newPassword=''}

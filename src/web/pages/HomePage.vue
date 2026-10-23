@@ -1,17 +1,24 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import AppState from '../components/AppState.vue'; import BookGrid from '../components/BookGrid.vue'; import { api } from '../lib/api'
+import { computed } from 'vue'
+import AppState from '../components/AppState.vue'
+import BookGrid from '../components/BookGrid.vue'
+import PageRefresh from '../components/PageRefresh.vue'
+import { api } from '../lib/api'
+import { preparedHome, type HomeData } from '../lib/catalog-warmup'
+import { usePageData } from '../lib/page-data'
 import { syncState } from '../lib/offline-sync'
-const state = ref<'loading'|'loaded'|'error'>('loading'); const home = ref<{ continueReading: any[]; recentlyAdded: any[] }>({ continueReading: [], recentlyAdded: [] })
-async function load() { state.value='loading'; try { home.value=await api('/api/v1/home'); state.value='loaded' } catch { state.value='error' } }
-async function remove(id:number){await api(`/api/v1/books/${id}/continue`,{method:'DELETE'});home.value.continueReading=home.value.continueReading.filter(book=>book.id!==id)}
-onMounted(load)
-watch(() => syncState.online, load)
+const { data, state, error, refreshing, refresh: load } = usePageData(() => api<HomeData>('/api/v1/home'), preparedHome())
+const home = computed(() => data.value ?? { continueReading: [], recentlyAdded: [] })
+async function remove(id: number) {
+  try { await api(`/api/v1/books/${id}/continue`, { method: 'DELETE' }); if (data.value) data.value = { ...data.value, continueReading: data.value.continueReading.filter(book => book.id !== id) } }
+  catch (reason) { error.value = reason instanceof Error ? reason.message : 'Não foi possível remover o livro.' }
+}
 </script>
 <template>
-  <div>
+  <div :aria-busy="refreshing">
     <header class="page-header"><p class="eyebrow">Sala de leitura</p><h1>Bem-vindo de volta</h1><p>Escolha onde a leitura continua hoje.</p></header>
-    <AppState v-if="state==='loading'" kind="loading" />
+    <PageRefresh :busy="refreshing" :error="state==='loaded' ? error : ''" @retry="load" />
+    <AppState v-if="state==='loading'" kind="loading" layout="catalog" />
     <AppState v-else-if="state==='error'" kind="error" title="Não foi possível carregar seu acervo" message="Confira a conexão e tente novamente."><button class="text-link" @click="load">Tentar novamente</button></AppState>
     <template v-else>
       <section v-if="home.continueReading.length" class="catalog-section"><header><h2>Continuar leitura</h2><RouterLink to="/library">Ver biblioteca</RouterLink></header><BookGrid :books="home.continueReading" compact :read-only="!syncState.online" @remove="remove" /></section>

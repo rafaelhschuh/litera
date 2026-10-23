@@ -40,17 +40,17 @@ export function mapScanJob(row: any): ScanJob {
   }
 }
 
-export function createScanJob(db: LiteraDatabase, libraryId: number, userId?: number): ScanJob {
+export function createScanJob(db: LiteraDatabase, libraryId: number, userId?: number, afterRunning = false): ScanJob {
   const library = db.prepare('SELECT id FROM libraries WHERE id=?').get(libraryId)
   if (!library) throw new Error('Library not found')
-  const active = db.prepare(`SELECT * FROM scan_jobs WHERE library_id=? AND status IN ('queued','running') ORDER BY id DESC LIMIT 1`).get(libraryId)
+  const active = db.prepare(`SELECT * FROM scan_jobs WHERE library_id=? AND (status='queued' OR (status='running' AND ?=0)) ORDER BY id DESC LIMIT 1`).get(libraryId, afterRunning ? 1 : 0)
   if (active) return mapScanJob(active)
   const result = db.prepare(`INSERT INTO scan_jobs(library_id,status,requested_by,correlation_id) VALUES (?,'queued',?,?)`).run(libraryId, userId ?? null, randomUUID())
   return mapScanJob(db.prepare('SELECT * FROM scan_jobs WHERE id=?').get(Number(result.lastInsertRowid)))
 }
 
 export async function runScanJob(db: LiteraDatabase, config: AppConfig, jobId: number): Promise<ScanJob> {
-  const claimed = db.prepare(`UPDATE scan_jobs SET status='running',attempt=attempt+1,started_at=CURRENT_TIMESTAMP,finished_at=NULL,error=NULL WHERE id=? AND status='queued'`).run(jobId)
+  const claimed = db.prepare(`UPDATE scan_jobs SET status='running',attempt=attempt+1,started_at=CURRENT_TIMESTAMP,finished_at=NULL,error=NULL WHERE id=? AND status='queued' AND NOT EXISTS (SELECT 1 FROM scan_jobs active WHERE active.library_id=scan_jobs.library_id AND active.status='running')`).run(jobId)
   if (!claimed.changes) return mapScanJob(db.prepare('SELECT * FROM scan_jobs WHERE id=?').get(jobId))
   const row = db.prepare('SELECT library_id AS libraryId,attempt,max_attempts AS maxAttempts FROM scan_jobs WHERE id=?').get(jobId) as { libraryId: number; attempt: number; maxAttempts: number }
   try {
@@ -62,11 +62,13 @@ export async function runScanJob(db: LiteraDatabase, config: AppConfig, jobId: n
     db.prepare(`UPDATE scan_jobs SET status=?,error=?,finished_at=CASE WHEN ? THEN NULL ELSE CURRENT_TIMESTAMP END,started_at=CASE WHEN ? THEN NULL ELSE started_at END WHERE id=?`).run(retry ? 'queued' : 'failed', message, retry ? 1 : 0, retry ? 1 : 0, jobId)
     if (retry) setTimeout(() => { void runScanJob(db, config, jobId) }, 250)
   }
+  const successor = db.prepare(`SELECT id FROM scan_jobs WHERE library_id=? AND status='queued' AND id<>? ORDER BY id LIMIT 1`).get(row.libraryId, jobId) as { id: number } | undefined
+  if (successor) setImmediate(() => { void runScanJob(db, config, successor.id) })
   return mapScanJob(db.prepare('SELECT * FROM scan_jobs WHERE id=?').get(jobId))
 }
 
-export function enqueueScanJob(db: LiteraDatabase, config: AppConfig, libraryId: number, userId?: number): ScanJob {
-  const job = createScanJob(db, libraryId, userId)
+export function enqueueScanJob(db: LiteraDatabase, config: AppConfig, libraryId: number, userId?: number, afterRunning = false): ScanJob {
+  const job = createScanJob(db, libraryId, userId, afterRunning)
   if (job.status === 'queued') setImmediate(() => { void runScanJob(db, config, job.id) })
   return job
 }

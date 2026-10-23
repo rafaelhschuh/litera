@@ -108,7 +108,12 @@ async function ready(page: Page) {
 }
 
 async function epubChapter(page: Page, chapter: number) {
-  await page.getByRole('button', { name: 'Abrir sumário', exact: true }).click()
+  // A previously opened reader can be backgrounded with its controls auto-hidden.
+  await page.bringToFront()
+  await ready(page)
+  const contents = page.getByRole('button', { name: 'Abrir sumário', exact: true })
+  if (!await contents.isVisible()) await page.keyboard.press('Tab')
+  await contents.click()
   await page.getByRole('dialog').getByRole('button', { name: `Capítulo ${chapter}`, exact: true }).click()
   await expect(active(page).locator('h1')).toHaveText(chapter === 1 ? 'Chegada' : 'Travessia')
   await ready(page)

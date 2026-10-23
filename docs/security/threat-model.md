@@ -48,3 +48,7 @@ Litera should operate locally without requiring a telemetry service. External me
 | Sensitive logs | JSON request metadata only; no bodies/tokens/content; internal error message replaced by derived id | manual log review in final gate |
 
 Residual items are documented in `docs/security/privacy-and-operations.md` and the compatibility matrix. They are not P0/P1 blockers for the self-hosted Beta profile.
+
+## Administrative uploads (0.6)
+
+`POST /api/v1/admin/libraries/:id/upload` uses the same session, admin, origin and expected-account checks as other protected writes. Library roots are resolved server-side and checked against configured roots. Filenames cannot contain path separators, control characters or a leading dot; existing files/symlinks are never overwritten. Streaming enforces the configured size with or without Content-Length, and EPUB/PDF parsing precedes publication. One active transfer per library prevents competing configuration changes. Staging lives under the private data directory and a hidden destination copy is published by an exclusive hard link; request failures clean both. An operator-level process crash can leave hidden staging files, which may be removed while the server is stopped. Book-folder backups now include new uploads. The scanner does not acquire mutation behavior.
