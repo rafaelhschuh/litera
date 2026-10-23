@@ -64,6 +64,7 @@ class ProductionPwaTest {
             host.await("Android integration settings did not render") { host.string(scenario,"document.body.innerText").contains("Ajustes do Android") }
             host.js(scenario,"Array.from(document.querySelectorAll('button')).find(button=>button.textContent.includes('Ajustes do Android')).click()")
             androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.host_awake))
+                .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                 .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
             androidx.test.espresso.Espresso.pressBack()
             for(bookId in listOf(epubId,pdfId)) {
