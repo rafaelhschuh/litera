@@ -43,10 +43,10 @@ class ProductionPwaTest {
             scenario.recreate()
             host.await("Recreated WebView lost the EPUB route",40_000) { host.string(scenario,"location.href") == readerUrl && host.string(scenario,"document.querySelector('.epub-stage:not(.epub-stage--preparing)')?.contentDocument?.body?.innerText || ''").contains("Conteúdo real") }
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-            host.await("Android Back did not return to book details") { host.string(scenario,"location.pathname") == "/books/$epubId" }
+            host.await("Android Back did not return to book details") { host.string(scenario,"location.pathname") == "/books/$epubId" && host.js(scenario,"Boolean(document.querySelector('a.back-link')) && !document.querySelector('.reader-stage')") == "true" }
             // Use the application's own router links again; no native API client
             // or fabricated successful book response participates in this gate.
-            host.js(scenario,"document.querySelector('a[href=\"/library\"]').click()")
+            host.js(scenario,"document.querySelector('a.back-link').click()")
             host.await("Library did not return") { host.string(scenario,"location.pathname") == "/library" && host.string(scenario,"document.body.innerText").contains("Fidelidade PDF") }
             host.js(scenario,"Array.from(document.querySelectorAll('a')).find(a=>a.textContent.includes('Fidelidade PDF')).click()")
             host.await("PDF details did not open") { host.js(scenario,"Boolean(document.querySelector('a[href^=\"/read/\"]'))") == "true" }
@@ -59,7 +59,7 @@ class ProductionPwaTest {
             host.await("PDF second page did not render") { host.js(scenario,"Boolean(document.querySelector('.pdf-page[data-page=\"2\"] canvas')?.width > 0)") == "true" }
             host.screenshot("pwa-webview-pdf-page-2")
             scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-            host.await("PDF detail did not return") { host.string(scenario,"location.pathname") == "/books/$pdfId" }
+            host.await("PDF detail did not return") { host.string(scenario,"location.pathname") == "/books/$pdfId" && host.js(scenario,"Boolean(document.querySelector('a.back-link')) && !document.querySelector('.reader-stage')") == "true" }
             host.js(scenario,"document.querySelector('a[href=\"/settings\"]').click()")
             host.await("Android integration settings did not render") { host.string(scenario,"document.body.innerText").contains("Ajustes do Android") }
             host.js(scenario,"Array.from(document.querySelectorAll('button')).find(button=>button.textContent.includes('Ajustes do Android')).click()")
