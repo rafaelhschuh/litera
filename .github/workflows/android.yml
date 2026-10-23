@@ -3,38 +3,23 @@ name: Android APK
 on:
   push:
     branches: [main]
-    tags: ['v*']
     paths:
       - 'android/**'
-      - 'package.json'
-      - 'src/web/**'
-      - 'tests/e2e/server.ts'
-      - 'tests/setup.ts'
-      - 'tests/fixtures.ts'
-      - 'package-lock.json'
-      - 'src/shared/**'
-      - 'src/server/**'
-      - '.github/workflows/android.yml'
+      - '!android/**/*.md'
+      - '!android/docs/**'
   pull_request:
     branches: [main]
     paths:
       - 'android/**'
-      - 'package.json'
-      - 'src/web/**'
-      - 'tests/e2e/server.ts'
-      - 'tests/setup.ts'
-      - 'tests/fixtures.ts'
-      - 'package-lock.json'
-      - 'src/shared/**'
-      - 'src/server/**'
-      - '.github/workflows/android.yml'
+      - '!android/**/*.md'
+      - '!android/docs/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.workflow }}-${{ github.ref }}
+  group: android-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:

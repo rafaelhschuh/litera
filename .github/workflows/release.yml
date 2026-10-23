@@ -2,67 +2,131 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to promote (for example v0.7.0)
+        required: true
+        type: string
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      IMAGE: ghcr.io/rafaelhschuh/litera
     steps:
+      - name: Validate release tag syntax
+        id: tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Expected an existing stable tag vMAJOR.MINOR.PATCH.' >&2
+            exit 1
+          fi
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - name: Validate tag and project version
+      - name: Validate tag, package version and immutable commit
         id: version
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          PROJECT_VERSION="$(node -p "require('./package.json').version")"
-          if [ "v${PROJECT_VERSION}" != "${GITHUB_REF_NAME}" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match package version ${PROJECT_VERSION}." >&2
-            exit 1
-          fi
-          echo "version=${PROJECT_VERSION}" >> "$GITHUB_OUTPUT"
-      - run: npm ci
-      - name: Install browser engines
-        run: npx playwright install --with-deps chromium webkit
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-      - name: Offline storage and sync — WebKit
-        run: LITERA_STORAGE_BROWSER=webkit npm test -- tests/offline-store.test.ts tests/offline-sync.test.ts
-      - name: Reader E2E — Chromium desktop and mobile
-        run: npm run test:e2e -- --project=chromium --project=chromium-mobile
+          version="$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Require successful CI for this exact commit
+        timeout-minutes: 11
+        env:
+          RELEASE_SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          for attempt in $(seq 1 40); do
+            runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --event push --commit "$RELEASE_SHA" --limit 20 --json status,conclusion,url)"
+            approved="$(jq -r '[.[] | select(.status == "completed" and .conclusion == "success")][0].url // empty' <<< "$runs")"
+            if [ -n "$approved" ]; then
+              echo "Approved by $approved"
+              echo "CI: $approved" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if jq -e 'length > 0 and all(.[]; .status == "completed")' <<< "$runs" >/dev/null; then
+              echo 'CI did not pass for this commit. Fix or rerun CI before promoting it.' >&2
+              exit 1
+            fi
+            sleep 15
+          done
+          echo 'No successful main CI within 10 minutes; no image was promoted.' >&2
+          exit 1
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve the image built by CI
+        id: image
+        env:
+          RELEASE_SHA: ${{ steps.version.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          digest="$(docker buildx imagetools inspect "$IMAGE:sha-$RELEASE_SHA" --format '{{.Manifest.Digest}}')"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          # Full version tags are immutable; retries may only reuse the same image.
+          if existing="$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{.Manifest.Digest}}' 2> "$RUNNER_TEMP/release-image-error")"; then
+            test "$existing" = "$digest"
+          elif ! grep -Eiq 'not found|manifest unknown' "$RUNNER_TEMP/release-image-error"; then
+            cat "$RUNNER_TEMP/release-image-error" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - uses: docker/metadata-action@v5
         id: meta
         with:
           images: ghcr.io/rafaelhschuh/litera
           flavor: latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
             type=raw,value=latest
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-      - name: Create GitHub Release
+      - name: Promote the existing digest without rebuilding
         env:
-          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "Litera ${VERSION}" --generate-notes
+        run: |
+          args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then args+=(--tag "$tag"); fi
+          done <<< "$IMAGE_TAGS"
+          docker buildx imagetools create "${args[@]}" "$IMAGE@$DIGEST"
+          test "$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{.Manifest.Digest}}')" = "$DIGEST"
+          echo "Image: $IMAGE:$VERSION@$DIGEST" >> "$GITHUB_STEP_SUMMARY"
+      - name: Create GitHub Release if missing
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists."
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "Litera $VERSION" --generate-notes
+          fi

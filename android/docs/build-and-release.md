@@ -21,7 +21,7 @@ Saída debug local: `app/build/outputs/apk/debug/app-debug.apk`. No CI, o artifa
 
 ## CI adicional
 
-O [workflow Android](../../.github/workflows/android.yml) é independente dos pipelines web/container existentes. Roda em PR/push com filtros dos caminhos Android, workflow e arquivos de versão, em tags e por disparo manual. Permissão padrão é `contents: read`.
+O [workflow Android](../../.github/workflows/android.yml) é independente dos pipelines web/container existentes. Roda em PR/push somente com mudanças sob `android/`, excluindo Markdown e `android/docs/`, ou por disparo manual. Web, backend, versão raiz, tags web e alterações somente no próprio workflow não disparam APK/emulador automaticamente. Permissão padrão é `contents: read`.
 
 Os gates são testes unitários, lint e montagem do APK debug, além de instrumentação em emulador em job separado. Artifacts contêm APK, checksum SHA-256 e relatórios. O workflow não publica em loja, não anexa APK automaticamente à GitHub Release e não substitui os gates web/Docker de [`git-and-ci.md`](../../docs/development/git-and-ci.md).
 
