@@ -166,6 +166,29 @@ class WebViewHostTest {
         }
     }
 
+    @Test fun changingServerRestoresNativeSetupThemeAfterDarkReader() {
+        val server = server()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            host.connect(server.origin)
+            host.await("Fixture did not load") { host.string(scenario,"document.title") == "Litera host fixture" }
+            host.js(scenario,"document.querySelector('#read').click()")
+            host.await("Dark reader did not activate") { awake(scenario) }
+            host.js(scenario,"window.LiteraAndroid.postMessage(JSON.stringify({type:'settings'}))")
+            val dialog = androidx.test.espresso.matcher.RootMatchers.isDialog()
+            val text = androidx.test.espresso.matcher.ViewMatchers.withText(R.string.host_change_server)
+            onView(text).inRoot(dialog).perform(scrollTo(),click())
+            onView(text).inRoot(dialog).perform(click())
+            onView(withId(R.id.server_url)).check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+            scenario.onActivity { activity ->
+                assertNull(activity.findViewById<WebView>(R.id.host_webview))
+                val dark = activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                assertEquals(!dark,WindowInsetsControllerCompat(activity.window,activity.window.decorView).isAppearanceLightStatusBars)
+                assertEquals(androidx.core.content.ContextCompat.getColor(activity,R.color.litera_background),(activity.window.decorView.background as ColorDrawable).color)
+            }
+            assertFalse(awake(scenario))
+        }
+    }
+
     private fun awake(scenario: ActivityScenario<MainActivity>): Boolean {
         var awake = false
         scenario.onActivity { awake = it.window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0 }

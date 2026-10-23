@@ -20,6 +20,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Use the Ubuntu package mirror for browser dependencies
+        run: |
+          # The Azure mirror timed out while fetching Playwright's OS packages.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          fi
       - name: Install browser engines
         run: npx playwright install --with-deps chromium webkit
       - run: npm run lint

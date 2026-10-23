@@ -103,7 +103,8 @@ class MainActivity : AppCompatActivity() {
     private fun text(label: Int) = TextView(this).apply { setText(label); setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,resources.getDimension(R.dimen.text_body)); setTextColor(color(R.color.litera_text)); setPadding(0,space/2,0,space/2) }
     private fun setup() {
         closeWeb()
-        root.removeAllViews(); root.setBackgroundColor(color(R.color.litera_background))
+        root.removeAllViews()
+        paintWindow(HostState(color(R.color.litera_background),resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES,false))
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(space,space,space,space) }
         content.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(space*5,space*5))
         content.addView(text(R.string.server_title).apply { setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX,resources.getDimension(R.dimen.text_section)) })
@@ -193,7 +194,9 @@ class MainActivity : AppCompatActivity() {
                 if(request.isForMainFrame) { failed = true; showError(R.string.host_http_error) }
             }
             override fun onReceivedSslError(view: WebView,handler: SslErrorHandler,error: SslError) {
-                handler.cancel(); failed = true; showError(R.string.host_tls_error)
+                handler.cancel()
+                // This callback also reports subresources; leave their recovery to the PWA.
+                if(error.url == view.url) { failed = true; showError(R.string.host_tls_error) }
             }
             override fun onRenderProcessGone(view: WebView,detail: RenderProcessGoneDetail): Boolean {
                 rememberPage(); closeWeb(); root.removeAllViews(); showError(R.string.host_renderer_error); return true
@@ -238,14 +241,17 @@ class MainActivity : AppCompatActivity() {
     }
     private fun applyAppearance(state: HostState) {
         appearance = state
+        paintWindow(state)
+        origin?.let { value -> local.edit { putInt("color-${value.profileName}",state.color); putBoolean("dark-${value.profileName}",state.dark) } }
+        rememberPage(); updateAwake()
+    }
+    private fun paintWindow(state: HostState) {
         // AppCompat can paint the window/decor outside the content's inset bounds.
         // Keep all three backgrounds coherent, including the camera/status area.
         window.setBackgroundDrawable(state.color.toDrawable())
         window.decorView.setBackgroundColor(state.color)
         root.setBackgroundColor(state.color); web?.setBackgroundColor(state.color)
         WindowInsetsControllerCompat(window,root).apply { isAppearanceLightStatusBars = !state.dark; isAppearanceLightNavigationBars = !state.dark }
-        origin?.let { value -> local.edit { putInt("color-${value.profileName}",state.color); putBoolean("dark-${value.profileName}",state.dark) } }
-        rememberPage(); updateAwake()
     }
     private fun dialogContext(): android.content.Context {
         val configuration = Configuration(resources.configuration)
@@ -264,7 +270,8 @@ class MainActivity : AppCompatActivity() {
         panel.addView(TextView(context).apply { setText(R.string.host_settings_note) })
         val version = WebViewCompat.getCurrentWebViewPackage(this)?.versionName ?: "?"
         panel.addView(TextView(context).apply { text = getString(R.string.host_about,BuildConfig.VERSION_NAME,version) })
-        val dialog = MaterialAlertDialogBuilder(context).setTitle(R.string.host_settings).setView(panel).setNegativeButton(R.string.cancel,null).create()
+        val scroll = ScrollView(context).apply { addView(panel) }
+        val dialog = MaterialAlertDialogBuilder(context).setTitle(R.string.host_settings).setView(scroll).setNegativeButton(R.string.cancel,null).create()
         panel.addView(button(R.string.host_change_server,context) {
             dialog.dismiss()
             MaterialAlertDialogBuilder(dialogContext()).setMessage(R.string.change_server_note).setPositiveButton(R.string.host_change_server) { _,_ -> pausePage(); setup() }.setNegativeButton(R.string.cancel,null).show()

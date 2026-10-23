@@ -22,6 +22,8 @@ Use short-lived branches or worktrees with required checks before merge when mul
 
 Falhas não são ignoradas. O workflow normal tem somente `contents: read`.
 
+Na instalação das dependências de sistema do Playwright, o CI substitui o mirror Ubuntu da Azure pelo arquivo primário HTTPS do Ubuntu quando o runner usa `/etc/apt/apt-mirrors.txt`. O mirror da Azure esgotou o limite de 30 minutos durante os downloads; essa escolha mantém os mesmos pacotes e gates, sem suprimir a instalação ou seus erros.
+
 ## Imagens e releases
 
 `.github/workflows/container.yml` publica `ghcr.io/rafaelhschuh/litera:main` e `sha-<commit>` em pushes para `main`, usando `GITHUB_TOKEN` com `packages: write`.

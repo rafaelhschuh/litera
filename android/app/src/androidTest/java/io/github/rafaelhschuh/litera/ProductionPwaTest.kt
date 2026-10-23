@@ -24,7 +24,7 @@ class ProductionPwaTest {
             host.js(scenario,"""for (const [id,value] of [['username','admin'],['password','test-password-strong-123']]) { const field=document.getElementById(id);field.value=value;field.dispatchEvent(new Event('input',{bubbles:true})); } document.querySelector('form').requestSubmit();""")
             host.await("Real authentication did not reach the catalog",30_000) { host.string(scenario,"location.pathname") == "/" && host.js(scenario,"Boolean(document.querySelector('a[href=\"/library\"]'))") == "true" }
             host.js(scenario,"document.querySelector('a[href=\"/library\"]').click()")
-            host.await("Real library fixtures did not render") { host.string(scenario,"document.body.innerText").contains("A Ilha de Teste") }
+            host.await("Real library fixtures did not render") { host.string(scenario,"location.pathname") == "/library" && host.string(scenario,"document.querySelector('h1')?.textContent") == "Biblioteca" && host.string(scenario,"document.body.innerText").contains("A Ilha de Teste") }
             host.screenshot("pwa-webview-library")
             host.js(scenario,"Array.from(document.querySelectorAll('a')).find(a=>a.textContent.includes('A Ilha de Teste')).click()")
             host.await("EPUB details did not open") { host.js(scenario,"Boolean(document.querySelector('a[href^=\"/read/\"]'))") == "true" }
@@ -66,6 +66,7 @@ class ProductionPwaTest {
             androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.host_awake))
                 .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                 .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+            host.screenshot("pwa-webview-android-settings")
             androidx.test.espresso.Espresso.pressBack()
             for(bookId in listOf(epubId,pdfId)) {
                 host.js(scenario,"location.href='/books/$bookId'")

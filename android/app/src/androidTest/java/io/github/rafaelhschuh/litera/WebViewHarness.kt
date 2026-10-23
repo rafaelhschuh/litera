@@ -51,6 +51,7 @@ internal class WebViewHarness {
         throw AssertionError("$message\nLast JavaScript: $lastEvaluation",failure)
     }
     fun screenshot(name: String) {
+        instrumentation.uiAutomation.waitForIdle(100,2_000)
         val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: error("Device screenshot unavailable")
         val output = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
             ?: File(instrumentation.targetContext.getExternalFilesDir(null),"test-screenshots").path
