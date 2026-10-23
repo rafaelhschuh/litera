@@ -91,7 +91,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then test "$CONTAINER_RESULT" = success; fi
 
   publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && needs.verify.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 15
