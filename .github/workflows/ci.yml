@@ -40,20 +40,30 @@ jobs:
         run: |
           node -e 'const v = require("./package-lock.json").packages["node_modules/@playwright/test"].version; if (v !== process.env.PLAYWRIGHT_CI_VERSION) throw new Error("Update the CI Playwright image to " + v)'
       - run: npm ci
+      - name: Prepare unprivileged validation user
+        # Root bypasses chmod-based read-only checks. Keep Actions setup as root,
+        # but run the application, builds and suites as the image's normal user.
+        run: |
+          chown -R pwuser:pwuser "$GITHUB_WORKSPACE"
+          runuser -u pwuser -- env "PATH=$PATH" sh -ec 'test "$(id -u)" -ne 0; test -w .; test -w "$HOME"'
       - name: Lint, types and unit/integration tests
         if: matrix.suite == 'checks'
         run: |
-          npm run lint
-          npm run typecheck
-          npm test -- --maxWorkers=2
+          runuser -u pwuser -- env "PATH=$PATH" sh -ec '
+            npm run lint
+            npm run typecheck
+            npm test -- --maxWorkers=2
+          '
       - name: Production build and reader E2E — desktop/mobile
         if: matrix.suite == 'readers'
         run: |
-          npm run build
-          npm run test:e2e -- --project=chromium --project=chromium-mobile --max-failures=3
+          runuser -u pwuser -- env "PATH=$PATH" sh -ec '
+            npm run build
+            npm run test:e2e -- --project=chromium --project=chromium-mobile --max-failures=3
+          '
       - name: Offline storage and sync — WebKit
         if: matrix.suite == 'offline-webkit'
-        run: LITERA_STORAGE_BROWSER=webkit npm test -- tests/offline-store.test.ts tests/offline-sync.test.ts --hookTimeout=30000 --maxWorkers=1
+        run: runuser -u pwuser -- env "PATH=$PATH" LITERA_STORAGE_BROWSER=webkit npm test -- tests/offline-store.test.ts tests/offline-sync.test.ts --hookTimeout=30000 --maxWorkers=1
       - name: Upload failed reader diagnostics
         if: failure() && matrix.suite == 'readers'
         uses: actions/upload-artifact@v4
