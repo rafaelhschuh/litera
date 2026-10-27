@@ -29,6 +29,7 @@ export function selectionAnchor(root: HTMLElement, range: Range, scope: TextAnch
 }
 
 export function rangeAtTextOffset(root: HTMLElement, offset: number): Range | undefined {
+  if (!Number.isInteger(offset) || offset < 0) return
   for (const node of readerTextNodes(root)) {
     if (offset < node.length) {
       const range = root.ownerDocument.createRange(); range.setStart(node, Math.max(0, offset)); range.setEnd(node, Math.min(node.length, offset + 1)); return range
@@ -37,20 +38,34 @@ export function rangeAtTextOffset(root: HTMLElement, offset: number): Range | un
   }
 }
 
-/** First character actually visible in a paginated column, including split paragraphs. */
-export function visibleTextOffset(root: HTMLElement): number {
+/** The first visible character, including paragraphs split over several columns. */
+export function visibleTextPosition(root: HTMLElement): { offset: number; top: number } | undefined {
   const width = root.ownerDocument.defaultView!.innerWidth, height = root.ownerDocument.defaultView!.innerHeight
   let offset = 0
   for (const node of readerTextNodes(root)) {
     const range = root.ownerDocument.createRange(); range.selectNodeContents(node)
-    if ([...range.getClientRects()].some(rect => rect.right > 0 && rect.left < width && rect.bottom > 0 && rect.top < height)) {
-      for (let index = 0; index < node.length; index++) {
-        range.setStart(node, index); range.setEnd(node, index + 1)
+    const intersects = () => [...range.getClientRects()].some(rect => rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < width && rect.bottom > 0 && rect.top < height)
+    if (intersects()) {
+      // A paragraph can span many screens. Search prefixes instead of forcing
+      // layout once per preceding character on every scroll event.
+      let low = 1, high = node.length
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2)
+        range.setEnd(node, middle)
+        if (intersects()) high = middle
+        else low = middle + 1
+      }
+      for (let index = Math.max(0, low - 1); index < node.length; index++) {
+        // Expand the end first: changing start past the old end collapses a Range.
+        range.setEnd(node, index + 1)
+        range.setStart(node, index)
         const rect = range.getBoundingClientRect()
-        if (rect.width && rect.right > 0 && rect.left < width && rect.bottom > 0 && rect.top < height) return offset + index
+        if (rect.width && rect.height && rect.right > 0 && rect.left < width && rect.bottom > 0 && rect.top < height) return { offset: offset + index, top: rect.top }
       }
     }
     offset += node.length
   }
-  return 0
+  // A page containing only a figure has no text anchor. Zero is a real offset
+  // at the beginning of the chapter and must not stand in for a missing anchor.
+  return undefined
 }

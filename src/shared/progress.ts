@@ -9,6 +9,8 @@ export type EpubLocator = {
   elementIndex?: number
   offset?: number
   textOffset?: number
+  /** Viewport Y of the textOffset character; omitted by older clients. */
+  textOffsetY?: number
   textAnchor?: TextAnchor
 }
 

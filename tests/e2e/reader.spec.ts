@@ -65,16 +65,36 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   const bookId = new URL(savedUrl).pathname.split('/').pop()
   const visibleLocator = await active(page).locator('body').evaluate(() => {
     const elements = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,figure,img')]
-    const elementIndex = elements.findIndex(el => el.getBoundingClientRect().bottom > Math.min(48, innerHeight * .1))
-    return { elementIndex, offset: Math.round(-elements[elementIndex]!.getBoundingClientRect().top) }
+    const visible = elements.filter(el => [...el.getClientRects()].some(rect => rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < innerWidth && rect.bottom > 0 && rect.top < innerHeight))
+    const element = visible.find(el => !visible.some(child => child !== el && el.contains(child)))!
+    return { elementIndex: elements.indexOf(element), offset: -element.getBoundingClientRect().top }
   })
   expect(visibleLocator.elementIndex).toBeGreaterThan(0)
   // Wait for this exact viewport, not any earlier nonzero debounced save.
   await expect.poll(async () => (await (await page.request.get(`/api/v1/books/${bookId}/progress`)).json()).progress.locator).toMatchObject(visibleLocator)
   const saved = (await (await page.request.get(`/api/v1/books/${bookId}/progress`)).json()).progress.locator
+  expect(saved.textOffset).toBeGreaterThan(0)
+  expect(Number.isFinite(saved.textOffsetY)).toBe(true)
+  const textTop = () => active(page).locator('.reader-document').evaluate((root, offset) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let node: Node | null, remaining = offset
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest('style,script,noscript')) continue
+      if (remaining < node.textContent!.length) {
+        const range = document.createRange()
+        range.setStart(node, remaining); range.setEnd(node, remaining + 1)
+        return range.getBoundingClientRect().top
+      }
+      remaining -= node.textContent!.length
+    }
+    return -Infinity
+  }, saved.textOffset)
+  await expect.poll(async () => Math.abs(await textTop() - saved.textOffsetY)).toBeLessThan(2)
   await page.reload()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await expect(active(page).locator('.reader-document')).toBeVisible()
-  await expect.poll(async () => active(page).locator('body').evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,figure,img')].findIndex(el => el.getBoundingClientRect().bottom > 48))).toBe(saved.elementIndex)
+  // Restore the same character at the same viewport Y, including partial lines.
+  await expect.poll(async () => Math.abs(await textTop() - saved.textOffsetY)).toBeLessThan(2)
   await page.screenshot({ path: `test-results/epub-${test.info().project.name}.png` })
   expect(errors).toEqual([])
 })

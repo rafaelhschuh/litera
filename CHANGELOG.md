@@ -7,6 +7,14 @@
 - Workflow adicional para APK debug e validação Android, sem alterar a versão 0.5.5 ou publicação web/container.
 - Contratos Android, ADR e documentação conectados à raiz. O preview nativo rejeitado não foi integrado; o novo PR WebView aguarda teste e autorização do usuário, sem merge.
 
+## 0.7.1 — 2026-10-26
+
+- EPUB preserva o caractere visível e sua posição vertical nos dois modos, com seleção do elemento realmente visível, fallback para figuras e preservação da última âncora em páginas sem conteúdo visível.
+- Restauração descarta callbacks antigos de resize, inclui o retorno às dimensões iniciais e preserva a âncora enquanto há seleção; comandos bloqueados por seleção/painéis não viram trocas de página atrasadas.
+- Destaques preservam o trecho ao limpar a seleção e aplicar marcas. A captura ignora documentos antigos e agrupa eventos de scroll, com busca otimizada em nós de texto longos.
+- Animação EPUB conserva html/body, métricas e fontes carregadas do iframe, com descarte ao encerrar ou cancelar a apresentação.
+- CI usa navegadores já incluídos na imagem Playwright e valida sem root, preservando os testes de permissões. A publicação de release promove a imagem aprovada do mesmo commit, sem rebuild ou testes duplicados; Android automático fica restrito a mudanças nativas.
+
 ## 0.7.0 — 2026-10-23
 
 - Celulares usam barra inferior flutuante e sólida com Favoritos, Biblioteca, Início central, Busca e Outros. A pílula de seleção desliza entre as opções, mantendo contraste e movimento reduzido.
