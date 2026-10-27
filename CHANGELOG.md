@@ -11,7 +11,7 @@
 
 - EPUB preserva o caractere visível e sua posição vertical nos dois modos, com seleção do elemento realmente visível, fallback para figuras e preservação da última âncora em páginas sem conteúdo visível.
 - Restauração descarta callbacks antigos de resize, inclui o retorno às dimensões iniciais e preserva a âncora enquanto há seleção; comandos bloqueados por seleção/painéis não viram trocas de página atrasadas.
-- Destaques preservam o trecho ao limpar a seleção e aplicar marcas. A captura ignora documentos antigos e agrupa eventos de scroll, com busca otimizada em nós de texto longos.
+- Destaques preservam o trecho ao limpar a seleção e aplicar marcas. A captura ignora documentos antigos e grava o progresso imediatamente, com busca otimizada em nós de texto longos.
 - Animação EPUB conserva html/body, métricas e fontes carregadas do iframe, com descarte ao encerrar ou cancelar a apresentação.
 - CI usa navegadores já incluídos na imagem Playwright e valida sem root, preservando os testes de permissões. A publicação de release promove a imagem aprovada do mesmo commit, sem rebuild ou testes duplicados; Android automático fica restrito a mudanças nativas.
 

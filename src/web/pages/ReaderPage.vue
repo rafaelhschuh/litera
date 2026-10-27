@@ -77,7 +77,7 @@ const layoutChanging = ref(false)
 let layoutGeneration = 0
 let layoutTimer: number | undefined
 let layoutSize = { width: 0, height: 0 }
-let viewportFrame = 0, selectionFrame = 0, epubScrollFrame = 0, fallbackReady: (() => void) | undefined
+let viewportFrame = 0, selectionFrame = 0, fallbackReady: (() => void) | undefined
 let frameInputCleanup: (() => void) | undefined, frameEventCleanup: (() => void) | undefined, stageInputCleanup: (() => void) | undefined
 let resizeObserver: ResizeObserver | undefined, pdfjs: any, pdf: any, pdfTextLayers: any[] = []
 let bookSource: BookSource | undefined
@@ -175,7 +175,7 @@ function epubPosition(document: Document) {
   return { locator, ratio: Math.min(1, (currentChapter.value + within) / count) }
 }
 function captureEpub(document = frame.value?.contentDocument ?? undefined, save = true) {
-  if (!document || document !== frame.value?.contentDocument || epubBusy.value || layoutChanging.value || epubLayoutDeferred) return pendingLocator
+  if (unmounting || !document || document !== frame.value?.contentDocument || epubBusy.value || layoutChanging.value || epubLayoutDeferred) return pendingLocator
   const position = epubPosition(document); epubRatio.value = position.ratio
   // A blank editorial page has no semantic anchor. Keep the last valid one
   // rather than publishing the start/end of the chapter as a fabricated position.
@@ -350,13 +350,12 @@ function updateSelection(document: Document, format: 'epub' | 'pdf', root: Node 
 async function attachFrame() {
   frameInputCleanup?.(); frameEventCleanup?.(); const document = frame.value?.contentDocument; if (!document?.querySelector('.reader-document')) return
   const generation = epubGeneration
-  const selection = () => updateSelection(document, 'epub', document.querySelector<HTMLElement>('.reader-document')!), scroll = () => {
-    cancelAnimationFrame(epubScrollFrame)
-    epubScrollFrame = requestAnimationFrame(() => { if (generation === epubGeneration && !unmounting) captureEpub(document) })
-  }
+  // Progress must reach durable storage during the scroll event. captureEpub
+  // rejects inactive documents and teardown without postponing that write.
+  const selection = () => updateSelection(document, 'epub', document.querySelector<HTMLElement>('.reader-document')!), scroll = () => { captureEpub(document) }
   const click = (event: MouseEvent) => handleLink(event, document), key = (event: KeyboardEvent) => onKey(event)
   document.addEventListener('selectionchange', selection); document.addEventListener('scroll', scroll, { passive: true, capture: true }); document.addEventListener('click', click); document.addEventListener('keydown', key)
-  frameEventCleanup = () => { cancelAnimationFrame(epubScrollFrame); document.removeEventListener('selectionchange', selection); document.removeEventListener('scroll', scroll, true); document.removeEventListener('click', click); document.removeEventListener('keydown', key) }
+  frameEventCleanup = () => { document.removeEventListener('selectionchange', selection); document.removeEventListener('scroll', scroll, true); document.removeEventListener('click', click); document.removeEventListener('keydown', key) }
   frameInputCleanup = attachReaderInput(document, { onEvent: debug ? event => log(event) : undefined, width: () => document.defaultView?.innerWidth ?? innerWidth, selectionText: () => document.defaultView?.getSelection()?.toString() ?? '', canPan: () => false, canSwipe: () => !epubBusy.value && !panel.value, onTap: handleTap, onSwipe: direction => { void move(direction === 'next' ? 1 : -1) }, onModeChange: setMode })
   await document.fonts?.ready; await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); if (generation !== epubGeneration || unmounting) return; restoreEpub(document, pendingLocator); await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); if (generation !== epubGeneration || unmounting) return; epubBusy.value = false; frameSources.value[1 - activeFrame.value] = ''; applyEpubHighlights(document); captureEpub(document, saveAfterFrameLoad)
   loadedChapter = currentChapter.value; pendingChapterEnd = false; finishPresentation(); prepareNeighbors(); log('epub-render-end', { chapter: currentChapter.value }); fallbackReady?.(); fallbackReady = undefined
