@@ -25,6 +25,8 @@ Ao avançar, a leitura voltava aproximadamente duas páginas e repetia o percurs
 
 O primeiro CI da tag `v0.7.1` passou 203 de 204 testes e reprovou o contrato de captura imediata de progresso (`tests/book-source.test.ts`). A publicação foi bloqueada. A correção posterior remove o adiamento por frame, mantendo os guards de documento ativo/desmontagem; o teste permanece inalterado.
 
+A segunda execução aprovou checks e WebKit; os E2E tiveram 59 casos aprovados e duas falhas no mesmo cenário offline, em Chromium desktop e mobile. O helper ainda calculava o bloco pelo antigo limiar de 48 px e arredondava o deslocamento. Ele foi atualizado para a geometria visível atual, mantendo a comparação exata do bloco/deslocamento. O mesmo caso também verifica o caractere salvo e sua coordenada vertical antes/depois do reload offline, a persistência do destaque e a sincronização dessa posição textual ao servidor.
+
 O usuário autorizou expressamente recriar `v0.7.1` com essa correção, pois a imagem e a GitHub Release não haviam sido publicadas. Trata-se de uma exceção autorizada à preservação de tags; o envio usa lease sobre o objeto remoto anterior para não sobrescrever alterações concorrentes.
 
 - Inspeção estática, `npm run typecheck`, ESLint dos arquivos alterados e `git diff --check`: aprovados após a revisão final.

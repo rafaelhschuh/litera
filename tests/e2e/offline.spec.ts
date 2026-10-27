@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import type { EpubLocator } from '../../src/shared/progress'
 
 const password = 'test-password-strong-123'
 const booksDatabase = 'litera-offline-books'
@@ -135,9 +136,31 @@ async function epubAssets(page: Page, chapter: number) {
 async function epubPosition(page: Page) {
   return active(page).locator('body').evaluate(() => {
     const elements = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote,figure,img')]
-    const elementIndex = elements.findIndex(element => element.getBoundingClientRect().bottom > Math.min(48, innerHeight * .1))
-    return { elementIndex, offset: Math.round(-elements[elementIndex]!.getBoundingClientRect().top) }
+    const visible = elements.filter(element => [...element.getClientRects()].some(rect => rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < innerWidth && rect.bottom > 0 && rect.top < innerHeight))
+    const element = visible.find(candidate => !visible.some(child => child !== candidate && candidate.contains(child)))
+    if (!element) throw new Error('Fixture has no visible EPUB element')
+    return { elementIndex: elements.indexOf(element), offset: -element.getBoundingClientRect().top }
   })
+}
+
+async function epubAnchorDisplacement(page: Page, locator: EpubLocator) {
+  return active(page).locator('.reader-document').evaluate((root, locator) => {
+    if (!Number.isInteger(locator.textOffset) || !Number.isFinite(locator.textOffsetY)) throw new Error('EPUB progress has no text position')
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let node: Node | null, remaining = locator.textOffset!
+    while ((node = walker.nextNode())) {
+      if (node.parentElement?.closest('style,script,noscript')) continue
+      if (remaining < node.textContent!.length) {
+        const range = document.createRange()
+        range.setStart(node, remaining); range.setEnd(node, remaining + 1)
+        const rect = range.getBoundingClientRect()
+        if (!rect.width || !rect.height || rect.right <= 0 || rect.left >= innerWidth || rect.bottom <= 0 || rect.top >= innerHeight) return Infinity
+        return Math.abs(rect.top - locator.textOffsetY!)
+      }
+      remaining -= node.textContent!.length
+    }
+    throw new Error('Saved EPUB character is missing from the chapter')
+  }, locator)
 }
 
 async function highlight(page: Page, paragraphs: Locator) {
@@ -210,9 +233,15 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   const epubQuote = await highlight(page, active(page).locator('p'))
   await expect.poll(async () => (await pending(page, user.id)).filter(operation => operation.bookId === epub.id).length).toBeGreaterThanOrEqual(2)
   await expect.poll(() => localLocator(page, user.id, epub.id)).toMatchObject(epubLocator)
+  const savedEpubLocator = await localLocator(page, user.id, epub.id) as EpubLocator
+  expect(savedEpubLocator.textOffset).toBeGreaterThan(0)
+  // Inspect the actual saved character, independently of the block helper:
+  // highlighting and offline reload must retain its viewport position.
+  await expect.poll(() => epubAnchorDisplacement(page, savedEpubLocator)).toBeLessThan(2)
   await page.reload()
   await ready(page)
   await expect.poll(async () => (await epubPosition(page)).elementIndex).toBe(epubLocator.elementIndex)
+  await expect.poll(() => epubAnchorDisplacement(page, savedEpubLocator)).toBeLessThan(2)
   await markedText(active(page).locator('mark[data-litera-highlight]'), epubQuote)
 
   await page.goto(`/read/${pdf.id}`)
@@ -261,6 +290,12 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   await cold.goto('/library')
   await expect(cold.getByText('Offline · livros deste dispositivo', { exact: true })).toBeVisible()
   expect(contentRequests).toEqual([]) // includes failed requests and SW-originated requests
+  // PDF navigation changed the viewport before the cold EPUB opening. Its
+  // first visible character can move within the same paragraph after reflow;
+  // synchronization must preserve the latest local locator, not an older one.
+  const queuedEpubLocator = await localLocator(cold, user.id, epub.id) as EpubLocator
+  expect(queuedEpubLocator).toMatchObject({ type: 'epub-cfi', chapterHref: 'chapter-2.xhtml', elementIndex: epubLocator.elementIndex })
+  expect(queuedEpubLocator.textOffset).toBeGreaterThan(0)
 
   const submissions: Array<{ url: string; body: string; operation: string; user: string }> = []
   context.on('request', request => {
@@ -277,7 +312,7 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
     expect((await response.json()).highlights).toMatchObject([{ quoteText: quote }])
   }
   const epubProgress = (await (await cold.request.get(`/api/v1/books/${epub.id}/progress`)).json()).progress
-  expect(epubProgress.locator).toMatchObject({ type: 'epub-cfi', chapterHref: 'chapter-2.xhtml', elementIndex: epubLocator.elementIndex })
+  expect(epubProgress.locator).toMatchObject(queuedEpubLocator)
   const pdfProgress = (await (await cold.request.get(`/api/v1/books/${pdf.id}/progress`)).json()).progress
   expect(pdfProgress.locator).toMatchObject({ type: 'pdf-reflow', page: 3 })
   expect(submissions).toHaveLength(2)
