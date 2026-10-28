@@ -97,6 +97,11 @@ textarea{width:100%;padding:var(--space-3) var(--space-4);color:var(--text-prima
 .reader-text-status{color:inherit;opacity:.7}
 .offline-book-control{display:grid;justify-items:start;gap:var(--space-2);margin-bottom:var(--space-6)}
 .offline-book-control .alert,.offline-book-control .field__hint{margin:0}
+.offline-book-control__actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
+.offline-book-control progress{width:min(24rem,100%);height:var(--space-2);border:0;border-radius:var(--radius-pill);accent-color:var(--accent)}
+.offline-book-control progress::-webkit-progress-bar{border-radius:var(--radius-pill);background:var(--surface-secondary)}
+.offline-book-control progress::-webkit-progress-value{border-radius:var(--radius-pill);background:var(--accent)}
+.offline-book-control progress::-moz-progress-bar{border-radius:var(--radius-pill);background:var(--accent)}
 
 @media(min-width:1100px) and (orientation:landscape){
   .reader-document{width:min(calc(var(--reader-measure,56rem) + 24rem),calc(100% - 4rem));column-count:2;column-width:28em;column-gap:clamp(4rem,7vw,8rem);column-rule:1px solid color-mix(in srgb,currentColor 14%,transparent)}

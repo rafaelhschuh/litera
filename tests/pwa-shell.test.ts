@@ -19,6 +19,7 @@ function workerHarness(source = workerSource(), stores = new Map<string, Map<str
       if (!stores.has(name)) stores.set(name, new Map())
       const store = stores.get(name)!
       return {
+        keys: async () => [...store.keys()].map(url => new Request(url)),
         match: async (request: string | Request) => store.get(key(request))?.clone(),
         put: async (request: string | Request, response: Response) => { store.set(key(request), response.clone()) },
       }

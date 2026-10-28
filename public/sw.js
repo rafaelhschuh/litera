@@ -23,10 +23,11 @@ function validResponse(url, response) {
 async function prepareShell() {
   if (BUILD === '__LITERA_' + 'BUILD__' || !ASSETS.has('/index.html')) throw new Error('Production shell required')
   const cache = await caches.open(SHELL_CACHE)
+  const stored = new Set((await cache.keys()).map(request => new URL(request.url).pathname))
   // Bound parallel requests and memory, particularly on mobile WebKit.
   for (let index = 0; index < PRECACHE.length; index += 8) {
     const results = await Promise.allSettled(PRECACHE.slice(index, index + 8).map(async url => {
-      if (await cache.match(url)) return
+      if (stored.has(url)) return
       const response = await fetch(new Request(new URL(url, self.location.origin), { cache: 'reload', credentials: 'omit' }))
       if (!validResponse(url, response)) throw new Error('Invalid shell resource: ' + url)
       await cache.put(url, response)

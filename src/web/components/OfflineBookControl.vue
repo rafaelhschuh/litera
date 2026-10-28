@@ -12,7 +12,12 @@ const download = computed(() => downloadStates[props.bookId])
 const errorMessage = computed(() => error.value || (download.value?.status === 'error' ? download.value.error : ''))
 const busy = computed(() => ['queued', 'downloading', 'updating'].includes(download.value?.status ?? ''))
 const updateAvailable = computed(() => saved.value && props.revision && localRevision.value !== props.revision)
-const percent = computed(() => download.value?.total ? Math.min(100, Math.floor(download.value.completed / download.value.total * 100)) : undefined)
+const percent = computed(() => download.value?.phase === 'transferring' && download.value.total ? Math.min(99, Math.floor(download.value.completed / download.value.total * 100)) : undefined)
+const actionLabel = computed(() => busy.value ? download.value?.phase === 'transferring' ? 'Baixando…' : download.value?.phase === 'verifying' ? 'Concluindo…' : 'Preparando…' : errorMessage.value ? 'Tentar novamente' : updateAvailable.value ? 'Atualizar download' : 'Salvar para offline')
+const received = computed(() => {
+  const bytes = download.value?.bytesReceived ?? 0
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(bytes / (bytes >= 1024 * 1024 ? 1024 * 1024 : 1024)) + (bytes >= 1024 * 1024 ? ' MB recebidos' : ' KB recebidos')
+})
 
 async function refresh() {
   const userId = getOfflineUser()
@@ -30,7 +35,7 @@ async function save() {
     await saveBookOffline(props.bookId, props.format)
     notice.value = 'Disponível offline.'
   } catch (reason) {
-    if (reason instanceof Error && reason.name === 'AbortError') notice.value = 'Download cancelado.'
+    if (reason instanceof Error && reason.name === 'AbortError') notice.value = saved.value ? 'Atualização cancelada. A cópia anterior continua disponível.' : 'Download cancelado.'
     else error.value = reason instanceof Error ? reason.message : 'Não foi possível salvar o livro para leitura offline.'
   }
   finally { await refresh() }
@@ -44,13 +49,16 @@ async function remove() {
 
 <template>
   <div class="offline-book-control">
-    <button v-if="!saved || updateAvailable" class="button button--secondary" :disabled="busy || !offlineSupport.available || !syncState.online" @click="save">
-      <UiIcon name="download" />{{ busy ? 'Salvando…' : updateAvailable ? 'Atualizar download' : 'Salvar para offline' }}
-    </button>
-    <button v-if="busy" class="button button--quiet" @click="cancelBookDownload(bookId)">Cancelar download</button>
-    <button v-else-if="saved" class="button button--quiet" @click="remove">Remover download</button>
-    <p v-if="busy" class="field__hint" role="status">{{ download?.label }} <span v-if="percent !== undefined">{{ percent }}%</span></p>
-    <progress v-if="busy" :value="percent" max="100" aria-label="Progresso do download" />
+    <div class="offline-book-control__actions">
+      <button v-if="!saved || updateAvailable" class="button button--secondary" :disabled="busy || !offlineSupport.available || !syncState.online" @click="save">
+        <span v-if="busy" class="loading-spinner" aria-hidden="true"></span><UiIcon v-else name="download" />{{ actionLabel }}
+      </button>
+      <button v-if="busy" class="button button--quiet" @click="cancelBookDownload(bookId)">Cancelar download</button>
+      <button v-else-if="saved" class="button button--quiet" @click="remove">Remover download</button>
+    </div>
+    <p v-if="busy" class="field__hint" role="status">{{ download?.label }}</p>
+    <p v-if="busy" class="field__hint"><template v-if="download?.total">{{ download.completed }} de {{ download.total }} {{ download.units === 'chapters' ? 'capítulos' : 'páginas' }} · </template>{{ received }}</p>
+    <progress v-if="busy" :value="percent" max="100" aria-label="Progresso do download" :aria-valuetext="download?.total ? `${download.completed} de ${download.total} ${download.units === 'chapters' ? 'capítulos' : 'páginas'}` : download?.label" />
     <p v-else-if="errorMessage" class="alert alert--error" role="alert">{{ errorMessage }}</p>
     <p v-else-if="notice" class="alert alert--success" role="status">{{ notice }}</p>
     <p v-else-if="!offlineSupport.available" class="field__hint">{{ offlineSupport.message }}</p>

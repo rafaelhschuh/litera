@@ -240,6 +240,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     // Live stat detects edits during a download, even before the next library scan.
     book.fileSize = stat.size
     book.fileRevision = createHash('sha256').update(JSON.stringify([`${stat.dev}:${stat.ino}`, stat.size, Math.round(stat.mtimeMs), (row as any).fileFingerprint])).digest('hex')
+    book.downloadRevision = createHash('sha256').update(JSON.stringify([stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs])).digest('hex')
     res.json({ book })
   })
   app.get('/api/v1/books/:id/content', requireUser, (req, res, next) => {
@@ -274,7 +275,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   app.get('/api/v1/books/:id/epub/manifest', requireUser, async (req, res, next) => {
     try {
       const file = locateBookFile(db, Number(req.params.id), req.user!); if (!file || file.format !== 'epub') { apiError(res, 404, 'EPUB_NOT_FOUND', 'EPUB is unavailable'); return }
-      const info = await extractEpub(file.filePath)
+      const info = await extractEpub(file.filePath, false)
       res.json({ title: info.title, chapters: info.chapters, navigation: info.navigation })
     } catch (error) { next(error) }
   })
@@ -316,6 +317,9 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
       if (!file || file.format !== 'pdf') { apiError(res, 404, 'PDF_NOT_FOUND', 'PDF is unavailable'); return }
       const requestedPage = Number(req.query.page)
       const pageNumber = Number.isFinite(requestedPage) ? Math.max(1, Math.floor(requestedPage)) : 1
+      // Offline needs every adapted page. Older libraries must open/prepare the
+      // PDF once, rather than reopening the entire file for each missing page.
+      if (req.query.prepare === 'all') await preparePdf(file.filePath, config.dataDir)
       res.json(await readPreparedPdfPage(file.filePath, config.dataDir, pageNumber))
     } catch (error) { next(error) }
   })

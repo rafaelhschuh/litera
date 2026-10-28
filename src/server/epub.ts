@@ -1,11 +1,11 @@
 import path from 'node:path'
+import fs from 'node:fs/promises'
 import { XMLParser } from 'fast-xml-parser'
 import postcss, { type ChildNode, type Declaration } from 'postcss'
 import sanitizeHtml from 'sanitize-html'
 import sharp from 'sharp'
 import yauzl from 'yauzl'
 
-type ZipEntry = { fileName: string; uncompressedSize: number }
 type ManifestItem = { id: string; href: string; mediaType: string; properties?: string }
 export type EpubNavigationItem = { id: string; label: string; depth: number; href?: string; chapterHref?: string }
 export type EpubInfo = {
@@ -112,8 +112,53 @@ function textOf(value: unknown): string | undefined {
   return undefined
 }
 
+const archivePaths = new WeakMap<yauzl.ZipFile, string>()
+const archiveIndexes = new Map<string, { revision: string; bytes: number; entries: Promise<Map<string, yauzl.Entry>> }>()
+const readingInfo = new Map<string, { revision: string; info: Promise<EpubInfo> }>()
+const EPUB_CACHE_LIMIT = 8
+
+async function archiveRevision(filePath: string): Promise<string> {
+  const stat = await fs.stat(filePath)
+  return JSON.stringify([stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs])
+}
+
 async function openZip(filePath: string): Promise<yauzl.ZipFile> {
-  return new Promise((resolve, reject) => yauzl.open(filePath, { lazyEntries: true, autoClose: false }, (error, zip) => error || !zip ? reject(error ?? new Error('Invalid EPUB archive')) : resolve(zip)))
+  const zip = await new Promise<yauzl.ZipFile>((resolve, reject) => yauzl.open(filePath, { lazyEntries: true, autoClose: false }, (error, zip) => error || !zip ? reject(error ?? new Error('Invalid EPUB archive')) : resolve(zip)))
+  archivePaths.set(zip, filePath)
+  return zip
+}
+
+async function archiveIndex(filePath: string): Promise<Map<string, yauzl.Entry>> {
+  const revision = await archiveRevision(filePath), cached = archiveIndexes.get(filePath)
+  if (cached?.revision === revision) {
+    archiveIndexes.delete(filePath); archiveIndexes.set(filePath, cached)
+    return cached.entries
+  }
+  const entry = { revision, bytes: 0, entries: (async () => {
+    const zip = await openZip(filePath)
+    try {
+      return await new Promise<Map<string, yauzl.Entry>>((resolve, reject) => {
+        const entries = new Map<string, yauzl.Entry>()
+        let count = 0
+        zip.on('entry', (item: yauzl.Entry) => {
+          // Bound hostile central directories as well as decompressed entries.
+          if (++count > 50_000) { reject(new Error('EPUB contains too many entries')); zip.close(); return }
+          if (!entries.has(item.fileName)) entries.set(item.fileName, item)
+          zip.readEntry()
+        })
+        zip.once('end', () => resolve(entries)); zip.once('error', reject); zip.readEntry()
+      })
+    } finally { zip.close() }
+  })() }
+  archiveIndexes.set(filePath, entry)
+  while (archiveIndexes.size > EPUB_CACHE_LIMIT) archiveIndexes.delete(archiveIndexes.keys().next().value!)
+  try {
+    const entries = await entry.entries
+    entry.bytes = [...entries.values()].reduce((sum, item) => sum + 512 + Buffer.byteLength(item.fileName) + Buffer.byteLength(item.comment) + item.extraFields.reduce((size, field) => size + field.data.length, 0), 0)
+    while ([...archiveIndexes.values()].reduce((sum, item) => sum + item.bytes, 0) > 16 * 1024 * 1024) archiveIndexes.delete(archiveIndexes.keys().next().value!)
+    return entries
+  }
+  catch (error) { if (archiveIndexes.get(filePath) === entry) archiveIndexes.delete(filePath); throw error }
 }
 
 async function readArchiveEntry(filePath: string, target: string, maxBytes: number): Promise<Buffer> {
@@ -122,28 +167,20 @@ async function readArchiveEntry(filePath: string, target: string, maxBytes: numb
 }
 
 async function readEntry(zip: yauzl.ZipFile, target: string, maxBytes = 10 * 1024 * 1024): Promise<Buffer> {
+  const entry = (await archiveIndex(archivePaths.get(zip)!)).get(target)
+  if (!entry) throw new Error(`EPUB entry not found: ${target}`)
+  if (entry.uncompressedSize > maxBytes) throw new Error(`EPUB entry exceeds ${maxBytes} bytes`)
   return new Promise((resolve, reject) => {
-    let settled = false
-    const cleanup = () => { zip.removeListener('entry', onEntry); zip.removeListener('end', onEnd); zip.removeListener('error', onError) }
-    const fail = (error: Error) => { if (!settled) { settled = true; cleanup(); reject(error) } }
-    const onError = (error: Error) => fail(error)
-    const onEnd = () => fail(new Error(`EPUB entry not found: ${target}`))
-    const onEntry = (entry: ZipEntry) => {
-      if (entry.fileName !== target) { zip.readEntry(); return }
-      if (entry.uncompressedSize > maxBytes) { fail(new Error(`EPUB entry exceeds ${maxBytes} bytes`)); return }
-      zip.openReadStream(entry as yauzl.Entry, (error, stream) => {
-        if (error || !stream) { fail(error ?? new Error('Unable to read EPUB entry')); return }
-        const chunks: Buffer[] = []
-        let total = 0
-        stream.on('data', (chunk: Buffer) => { total += chunk.length; if (total > maxBytes) stream.destroy(new Error('EPUB entry expanded beyond limit')); else chunks.push(chunk) })
-        stream.once('error', fail)
-        stream.once('end', () => { if (!settled) { settled = true; cleanup(); resolve(Buffer.concat(chunks)) } })
-      })
-    }
-    zip.on('entry', onEntry)
-    zip.once('end', onEnd)
-    zip.once('error', onError)
-    zip.readEntry()
+    const fail = (reason: Error) => { zip.removeListener('error', fail); reject(reason) }
+    zip.once('error', fail)
+    zip.openReadStream(entry, (error, stream) => {
+      if (error || !stream) { fail(error ?? new Error('Unable to read EPUB entry')); return }
+      const chunks: Buffer[] = []
+      let total = 0
+      stream.on('data', (chunk: Buffer) => { total += chunk.length; if (total > maxBytes) stream.destroy(new Error('EPUB entry expanded beyond limit')); else chunks.push(chunk) })
+      stream.once('error', fail)
+      stream.once('end', () => { zip.removeListener('error', fail); resolve(Buffer.concat(chunks)) })
+    })
   })
 }
 
@@ -155,7 +192,21 @@ async function packagePath(zip: yauzl.ZipFile): Promise<string> {
   return fullPath
 }
 
-export async function extractEpub(filePath: string): Promise<EpubInfo> {
+export async function extractEpub(filePath: string, includeCover = true): Promise<EpubInfo> {
+  if (includeCover) return extractEpubInfo(filePath, true)
+  const revision = await archiveRevision(filePath), cached = readingInfo.get(filePath)
+  if (cached?.revision === revision) {
+    readingInfo.delete(filePath); readingInfo.set(filePath, cached)
+    return cached.info
+  }
+  const entry = { revision, info: extractEpubInfo(filePath, false) }
+  readingInfo.set(filePath, entry)
+  while (readingInfo.size > EPUB_CACHE_LIMIT) readingInfo.delete(readingInfo.keys().next().value!)
+  try { return await entry.info }
+  catch (error) { if (readingInfo.get(filePath) === entry) readingInfo.delete(filePath); throw error }
+}
+
+async function extractEpubInfo(filePath: string, includeCover: boolean): Promise<EpubInfo> {
   const zip = await openZip(filePath)
   try {
     const opfPath = await packagePath(zip)
@@ -175,7 +226,7 @@ export async function extractEpub(filePath: string): Promise<EpubInfo> {
     const coverId = arrayOf(metadata.meta).find((item: any) => item?.name === 'cover')?.content
     const coverItem = manifest.find((item) => item.id === coverId || item.properties?.split(/\s+/).includes('cover-image'))
     let cover: EpubInfo['cover']
-    if (coverItem) {
+    if (coverItem && includeCover) {
       const entryPath = path.posix.normalize(path.posix.join(path.posix.dirname(opfPath), coverItem.href))
       // The cover may appear earlier than the package document in the ZIP. A fresh
       // lazy reader avoids continuing from the package entry and missing it.
@@ -355,7 +406,7 @@ function sanitizeEpubCss(css: string, context: CssContext, inline = false): stri
  * image/stylesheet/font URLs use the authorized asset API. Callers must not
  * rewrite them again. The surrounding reader owns CSP, theme and page layout. */
 export async function readEpubChapter(filePath: string, href: string, bookId?: string | number): Promise<string> {
-  const info = await extractEpub(filePath)
+  const info = await extractEpub(filePath, false)
   if (!info.chapters.some((chapter) => chapter.href === href)) throw new Error('Chapter is not in the EPUB spine')
   const zip = await openZip(filePath)
   try {
@@ -497,7 +548,7 @@ async function rasterizeEpubSvg(filePath: string, entryPath: string, data: Buffe
  * ID, CSS is still sanitized, but resource-bearing declarations are omitted.
  * SVG assets are sanitized then rasterized to PNG, never served as XML/HTML. */
 export async function readEpubAsset(filePath: string, chapterHref: string, source: string, bookId?: string | number): Promise<{ data: Buffer; contentType: string }> {
-  const info = await extractEpub(filePath)
+  const info = await extractEpub(filePath, false)
   if (!info.chapters.some((chapter) => chapter.href === chapterHref)) throw new Error('Chapter is not in the EPUB spine')
   const chapterPath = resourcePath(info.opfDirectory, chapterHref)
   const entryPath = resourcePath(path.posix.dirname(chapterPath), source)
@@ -512,7 +563,7 @@ export async function readEpubAsset(filePath: string, chapterHref: string, sourc
 export async function searchEpub(filePath: string, query: string): Promise<Array<{ href: string; label: string; excerpt: string }>> {
   const normalizedQuery = query.trim().toLocaleLowerCase()
   if (normalizedQuery.length < 2) return []
-  const info = await extractEpub(filePath)
+  const info = await extractEpub(filePath, false)
   const results: Array<{ href: string; label: string; excerpt: string }> = []
   for (const chapter of info.chapters.slice(0, 100)) {
     const html = await readEpubChapter(filePath, chapter.href)

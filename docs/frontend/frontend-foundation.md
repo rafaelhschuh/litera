@@ -148,3 +148,7 @@ Callbacks de View Transitions não aguardam rAF nem tarefas que dependam dele. P
 
 
 Text reading also offers independent top/bottom margins, each 0–160px (4px range steps), defaulting to 80/96px to match the preceding reader spacing. These are persisted reader preferences shared by EPUB scrolling, viewport pages and adapted PDF. Paginated EPUB bounds effective padding on short viewports to retain at least a readable content area; images use that same remaining height. Reflow/PDF original source assets remain unchanged.
+
+## Offline download feedback
+
+`OfflineBookControl` groups download/cancel actions and reuses the shared spinner, native progress and field/status text. Preparation and final confirmation use indeterminate progress; transfer shows completed EPUB chapters or PDF pages, with at most 99% until final confirmation. Received bytes are separate from the semantic unit count. The live status announces phase changes; byte updates are supplementary text. Keep retry actionable and explain that a cancelled update preserves the previous download. Details: [ADR-0016](../decisions/ADR-0016-offline-download-pipeline.md).

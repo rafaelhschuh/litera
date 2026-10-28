@@ -10,8 +10,8 @@ export type OfflineBook = {
 }
 
 export type OfflineStage = { userId: number; bookId: number; generation: string; expiresAt: number }
-type StoredBinary = { blob: Blob | ArrayBuffer; mimeType?: string }
-type Resource = { userId: number; bookId: number; generation: string; url: string } & StoredBinary
+type StoredBinary = { blob?: Blob | ArrayBuffer; mimeType?: string }
+type Resource = { userId: number; bookId: number; generation: string; url: string; alias?: string } & StoredBinary
 const DATABASE = 'litera-offline-books'
 const VERSION = 1
 const LEASE_MS = 120_000
@@ -19,7 +19,7 @@ let database: Promise<IDBDatabase> | undefined
 let useArrayBuffers = false
 
 function restoredBlob(value: StoredBinary | undefined): Blob | undefined {
-  if (!value) return undefined
+  if (!value?.blob) return undefined
   return value.blob instanceof Blob ? value.blob : new Blob([value.blob], { type: value.mimeType ?? 'application/octet-stream' })
 }
 
@@ -35,6 +35,7 @@ export function normalizeOfflineUrl(value: string): string {
   if (url.origin !== origin || !url.pathname.startsWith('/api/v1/')) throw new Error('Recurso offline fora da aplicação.')
   if (/\/epub\/chapter$/.test(url.pathname)) for (const key of ['scale', 'theme', 'lineHeight', 'margins']) url.searchParams.delete(key)
   if (/\/pdf\/figure$/.test(url.pathname)) url.searchParams.delete('page')
+  if (/\/pdf\/reflow$/.test(url.pathname)) url.searchParams.delete('prepare')
   url.searchParams.sort()
   return url.pathname + url.search
 }
@@ -240,16 +241,33 @@ export async function putOfflineResource(stage: OfflineStage, url: string, blob:
   }
 }
 
+/** Keep each EPUB font/image/CSS binary once, while preserving all chapter URLs.
+ * This is additive data in the existing store; old packages need no migration. */
+export async function putOfflineAlias(stage: OfflineStage, url: string, target: string): Promise<void> {
+  const normalized = normalizeOfflineUrl(url), alias = normalizeOfflineUrl(target), prefix = `/api/v1/books/${stage.bookId}/epub/asset?`
+  if (!normalized.startsWith(prefix) || !alias.startsWith(prefix) || normalized === alias) throw new Error('Referência offline inválida.')
+  await transaction(await openDatabase(), ['stages', 'resources'], 'readwrite', async tx => {
+    await requireStage(tx, stage)
+    const resources = tx.objectStore('resources')
+    if (!await request(resources.getKey([stage.userId, stage.bookId, stage.generation, alias]))) throw new Error('Recurso offline ainda não foi salvo.')
+    await request(resources.put({ userId: stage.userId, bookId: stage.bookId, generation: stage.generation, url: normalized, alias } satisfies Resource))
+  })
+}
+
 export async function commitOfflineDownload(stage: OfflineStage, book: OfflineBook, requiredUrls: string[], isCurrent: () => boolean = () => true): Promise<void> {
   if (book.userId !== stage.userId || book.bookId !== stage.bookId || book.generation !== stage.generation || !requiredUrls.length) throw new Error('Pacote offline inválido.')
   const db = await openDatabase()
   await transaction(db, ['stages', 'books', 'resources', 'snapshots', 'retired'], 'readwrite', async tx => {
     await requireStage(tx, stage)
     const resources = tx.objectStore('resources')
-    for (const url of new Set(requiredUrls.map(normalizeOfflineUrl))) {
-      const resource = await request<Resource | undefined>(resources.get([stage.userId, stage.bookId, stage.generation, url]))
-      if (!resource) throw new Error('Download incompleto. Tente salvar o livro novamente.')
-      if (snapshotUrl(url, stage.bookId)) await request(tx.objectStore('snapshots').put({ userId: stage.userId, bookId: stage.bookId, url, blob: resource.blob, mimeType: resource.mimeType }))
+    const urls = [...new Set(requiredUrls.map(normalizeOfflineUrl))]
+    // Check keys in one queued batch; do not deserialize every book Blob again
+    // during the final transaction, especially with WebKit's ArrayBuffer fallback.
+    const keys = await Promise.all(urls.map(url => request(resources.getKey([stage.userId, stage.bookId, stage.generation, url]))))
+    if (keys.some(key => key === undefined)) throw new Error('Download incompleto. Tente salvar o livro novamente.')
+    for (const url of urls.filter(url => snapshotUrl(url, stage.bookId))) {
+      const resource = await request<Resource>(resources.get([stage.userId, stage.bookId, stage.generation, url]))
+      await request(tx.objectStore('snapshots').put({ userId: stage.userId, bookId: stage.bookId, url, blob: resource.blob, mimeType: resource.mimeType }))
     }
     const previous = await request<OfflineBook | undefined>(tx.objectStore('books').get([stage.userId, stage.bookId]))
     if (previous && previous.generation !== stage.generation) await request(tx.objectStore('retired').put({ userId: previous.userId, bookId: previous.bookId, generation: previous.generation }))
@@ -330,7 +348,14 @@ export async function getOfflineResource(userId: number, bookId: number, url: st
     if (generation || book) {
       const selected = generation ?? book!.generation
       const allowed = book?.generation === selected || await request(tx.objectStore('retired').get([userId, bookId, selected]))
-      const resource = allowed ? await request<Resource | undefined>(tx.objectStore('resources').get([userId, bookId, selected, normalized])) : undefined
+      let resource = allowed ? await request<Resource | undefined>(tx.objectStore('resources').get([userId, bookId, selected, normalized])) : undefined
+      const visited = new Set([normalized])
+      while (resource?.alias) {
+        const target = normalizeOfflineUrl(resource.alias)
+        if (!target.startsWith(`/api/v1/books/${bookId}/epub/asset?`) || visited.has(target) || visited.size >= 8) { resource = undefined; break }
+        visited.add(target)
+        resource = await request<Resource | undefined>(tx.objectStore('resources').get([userId, bookId, selected, target]))
+      }
       return { resource, committed: true }
     }
     const snapshot = snapshotUrl(normalized, bookId) ? await request<StoredBinary | undefined>(tx.objectStore('snapshots').get([userId, bookId, normalized])) : undefined
