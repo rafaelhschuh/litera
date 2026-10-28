@@ -39,16 +39,29 @@ async function checkUpdate() {
 <template>
   <div>
     <header class="page-header"><h1>Preferências</h1></header>
-    <OfflineStorage />
-    <section v-if="offlineSupport.supported" class="settings-section"><h2>Atualização do aplicativo</h2><p>O Litera verifica novas versões automaticamente enquanto está aberto.</p><UiButton :disabled="pwaUpdate.checking || !syncState.online" @click="checkUpdate">{{ pwaUpdate.checking ? 'Verificando…' : pwaUpdate.available ? 'Ver atualização disponível' : 'Verificar atualizações' }}</UiButton></section>
     <AppState v-if="loading" kind="loading" />
     <template v-else>
       <UiToast :message="notice" /><p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>
       <section class="settings-section"><h2>Aparência</h2><p>O tema Sistema acompanha a aparência deste dispositivo.</p><div class="segmented-control" aria-label="Tema do aplicativo"><button :aria-pressed="preferences.appTheme==='system'" @click="previewTheme('system')">Sistema</button><button :aria-pressed="preferences.appTheme==='light'" @click="previewTheme('light')">Claro</button><button :aria-pressed="preferences.appTheme==='dark'" @click="previewTheme('dark')">Escuro</button></div></section>
       <section class="settings-section"><h2>Leitura</h2><p>Estas opções se aplicam a EPUBs e ao texto adaptado de PDFs. O tema da leitura é independente da aparência do aplicativo.</p><div class="settings-grid"><UiField label="Tema da leitura em texto" for-id="pref-theme"><select id="pref-theme" v-model="preferences.theme"><option value="light">Claro</option><option value="sepia">Sépia</option><option value="dark">Escuro</option></select></UiField><UiField label="Tamanho do texto" for-id="pref-scale"><div class="reader-range"><input id="pref-scale" v-model.number="preferences.fontScale" type="range" min="80" max="200" step="5" /><output for="pref-scale">{{ preferences.fontScale }}%</output></div></UiField><UiField label="Navegação do EPUB" for-id="pref-epub-flow"><select id="pref-epub-flow" v-model="preferences.epubFlow"><option value="scroll">Rolagem por capítulo</option><option value="paginated">Páginas pela tela</option></select></UiField><UiField label="Largura do texto" for-id="pref-margins"><select id="pref-margins" v-model="preferences.margins"><option value="narrow">Estreita</option><option value="normal">Normal</option><option value="wide">Ampla</option></select></UiField></div><ReaderTypographyFields v-model="typography" /><UiSwitch v-model="preferences.pdfInvert" label="Inverter cores dos PDFs" description="Cria um modo escuro forçado sem modificar os arquivos originais." /><UiSwitch v-model="preferences.reducedMotion" label="Reduzir movimento" description="Remove transições não essenciais mesmo quando o sistema não solicitar." /><UiButton variant="primary" @click="save">Salvar preferências</UiButton></section>
-      <section v-if="androidHost" class="settings-section"><h2>Aplicativo Android</h2><p>Leitura e downloads ficam neste aplicativo, separados do Chrome. Os ajustes do Android controlam o servidor e a tela acesa durante a leitura.</p><UiButton @click="openAndroidSettings">Ajustes do Android</UiButton></section>
-      <section v-else class="settings-section"><h2>Aplicativo</h2><p>Instale o Litera para abrir em uma janela própria. Os livros precisam ser salvos separadamente para leitura offline.</p><p v-if="pwaInstall.installed" class="alert alert--success">O Litera já está instalado neste dispositivo.</p><UiButton v-else-if="pwaInstall.available" variant="primary" @click="install">Instalar Litera</UiButton><p v-else class="field__hint">No Safari do iPhone ou iPad, abra Compartilhar e escolha “Adicionar à Tela de Início”. No Mac, use “Adicionar ao Dock” quando disponível. No Chrome, procure “Instalar aplicativo” no menu. O acesso deve usar HTTPS (ou localhost durante desenvolvimento).</p></section>
       <section class="settings-section"><h2>Segurança da conta</h2><p v-if="!syncState.online" class="field__hint">Alterar a senha requer conexão.</p><form v-else class="account-form" @submit.prevent="changePassword"><UiField label="Senha atual" for-id="current-password"><input id="current-password" v-model="currentPassword" type="password" autocomplete="current-password" required /></UiField><UiField label="Nova senha" for-id="new-password" hint="Use pelo menos 12 caracteres."><input id="new-password" v-model="newPassword" type="password" minlength="12" autocomplete="new-password" required /></UiField><UiButton type="submit">Alterar senha</UiButton></form></section>
     </template>
+    <section class="settings-section" aria-labelledby="app-offline-title">
+      <h2 id="app-offline-title">Aplicativo e offline</h2>
+      <div class="settings-subsection">
+        <template v-if="androidHost"><h3>Aplicativo Android</h3><UiButton @click="openAndroidSettings">Ajustes do Android</UiButton></template>
+        <template v-else>
+          <h3>Instalação</h3>
+          <p v-if="pwaInstall.installed" class="field__hint">Aplicativo instalado.</p>
+          <UiButton v-else-if="pwaInstall.available" variant="primary" @click="install">Instalar Litera</UiButton>
+          <details v-else class="settings-help"><summary>Como instalar</summary><p>No Safari, use Compartilhar → Adicionar à Tela de Início, ou Adicionar ao Dock no Mac. No Chrome, escolha Instalar aplicativo no menu.</p></details>
+        </template>
+      </div>
+      <div v-if="offlineSupport.supported" class="settings-subsection">
+        <h3>Atualizações</h3>
+        <UiButton :disabled="pwaUpdate.checking || !syncState.online" @click="checkUpdate">{{ pwaUpdate.checking ? 'Verificando…' : pwaUpdate.available ? 'Ver atualização disponível' : 'Verificar atualizações' }}</UiButton>
+      </div>
+      <OfflineStorage />
+    </section>
   </div>
 </template>

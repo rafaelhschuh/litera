@@ -165,6 +165,13 @@ textarea{width:100%;padding:var(--space-3) var(--space-4);color:var(--text-prima
 .offline-storage-list{list-style:none;padding:0;margin:var(--space-4) 0}
 .offline-storage-list li{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);padding:var(--space-3) 0;border-bottom:1px solid var(--border)}
 .offline-storage-list p{margin:var(--space-1) 0 0}
+.settings-subsection{margin-top:var(--space-5);padding-top:var(--space-5);border-top:1px solid var(--border)}
+.settings-subsection:first-of-type{margin-top:0;padding-top:0;border-top:0}
+.settings-subsection>h3{margin-bottom:var(--space-3)}
+.settings-help{margin-top:var(--space-3);color:var(--text-secondary);font-size:var(--text-sm)}
+.settings-help summary{min-height:44px;padding-block:var(--space-3);cursor:pointer}
+.settings-help summary:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+.settings-help p{margin:var(--space-2) 0 0}
 .offline-book-control progress{display:block;width:100%;accent-color:var(--accent);margin-block:var(--space-2)}
 
 /* Screen continuity: movement uses the shared motion and spacing tokens. */

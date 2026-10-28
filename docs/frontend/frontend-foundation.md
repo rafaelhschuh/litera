@@ -166,3 +166,7 @@ Connection/sync feedback is a compact, expandable status surface using existing 
 ## Phone administrative navigation
 
 Below 640px, administration uses the existing **More** sheet rather than a second drawer. More → Administration opens a nested list with Overview, Libraries, Users, Metadata, Jobs, Compatibility and System; the latter two share a System heading. A back action returns to the general More list without navigating away. Inside admin routes, More opens this list directly. The current route/parent section is highlighted exactly once; library details select Libraries, never Overview. Switching sheet levels focuses the shared dialog heading; closing/navigation keep the existing motion and focus behavior. Desktop retains its sidebar and tablet its drawer; breakpoint changes release old drawer state/scroll lock. Both menus share the same destination definition and administrator guard.
+
+## Preferences app section
+
+Preferences orders Appearance, Reading, Account security, then a single **Application and offline** section. Installation, Updates and Downloads are subsections with existing spacing/border/type tokens, without nested cards. Keep routine copy brief; installation instructions and storage estimates/account-local lifecycle details use native keyboard-accessible disclosures. The final app/download section remains available independently of loading account preferences.

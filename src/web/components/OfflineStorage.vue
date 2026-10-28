@@ -28,20 +28,19 @@ onBeforeUnmount(() => window.removeEventListener('litera-downloads-changed', ref
 </script>
 
 <template>
-  <section class="settings-section" aria-labelledby="offline-storage-title">
-    <h2 id="offline-storage-title">Offline</h2>
-    <p>Livros salvos somente neste dispositivo. Remover um download preserva progresso, destaques e favoritos. Sair da conta apaga os dados locais.</p>
+  <div class="settings-subsection" aria-labelledby="offline-storage-title">
+    <h3 id="offline-storage-title">Downloads</h3>
     <p v-if="!offlineSupport.available" class="alert">{{ offlineSupport.message }}</p>
     <p v-if="loading" role="status">Consultando livros salvos…</p>
     <template v-else>
-      <p>{{ books.length }} livros salvos · {{ bytes(used) }} em conteúdo de leitura.</p>
-      <p v-if="capacity !== undefined && browserUsage !== undefined" class="field__hint">Armazenamento do site: aproximadamente {{ bytes(browserUsage) }} usados de {{ bytes(capacity) }} disponibilizados pelo navegador.</p>
+      <p v-if="books.length">{{ books.length }} {{ books.length === 1 ? 'livro salvo' : 'livros salvos' }} · {{ bytes(used) }}</p>
       <ul v-if="books.length" class="offline-storage-list">
         <li v-for="book in books" :key="book.bookId"><div><RouterLink :to="`/books/${book.bookId}`">{{ book.metadata.title }}</RouterLink><p class="field__hint">{{ book.format.toUpperCase() }} · {{ bytes(book.bytes) }}</p></div><button class="button button--quiet" :disabled="removing === book.bookId" :aria-label="`Remover download de ${book.metadata.title}`" @click="remove(book.bookId)">{{ removing === book.bookId ? 'Removendo…' : 'Remover download' }}</button></li>
       </ul>
-      <p v-else>Você ainda não tem livros disponíveis offline. Conecte-se, abra um livro e escolha “Salvar para offline”.</p>
-      <p class="field__hint">O navegador pode liberar espaço ou remover dados do site. Espere a confirmação do download antes de desconectar.</p>
+      <p v-else class="field__hint">Nenhum livro salvo. Use “Salvar para offline” na página de um livro.</p>
+      <p v-if="books.length" class="field__hint">Remover um download preserva progresso e destaques.</p>
+      <details class="settings-help"><summary>Armazenamento</summary><p v-if="capacity !== undefined && browserUsage !== undefined">Uso do site (estimativa): {{ bytes(browserUsage) }} de {{ bytes(capacity) }}.</p><p>Os downloads ficam neste navegador e são apagados ao sair da conta.</p></details>
     </template>
     <p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>
-  </section>
+  </div>
 </template>
