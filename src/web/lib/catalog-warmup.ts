@@ -3,9 +3,10 @@ import { api } from './api'
 import { auth } from './auth'
 import { getOfflineUser, offlineContext } from './offline-context'
 import { syncState } from './offline-sync'
+import type { ReadingStats } from '../../shared/reading-stats'
 
 type BookSummary = { id: number; hasCover?: boolean; fileRevision?: string; coverRevision?: string }
-export type HomeData = { continueReading: any[]; recentlyAdded: any[] }
+export type HomeData = { continueReading: any[]; recentlyAdded: any[]; readingStats?: ReadingStats; offline?: boolean }
 export type BookDetail = { book: any; highlights: any[] }
 type Entry = { revision?: string; expires: number; data?: BookDetail; promise: Promise<void>; controller: AbortController }
 const books = new Map<number, Entry>()

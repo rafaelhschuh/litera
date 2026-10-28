@@ -199,10 +199,25 @@ async function localCatalog(ctx: Context, url: URL): Promise<any> {
     const metadata = stored.find(row => row.key === stateKey(book.bookId))?.value?.book ?? book.metadata
     return overlayBook({ ...metadata, id: book.bookId, offline: true }, stored, pending, true)
   })
-  if (url.pathname === '/api/v1/home') return {
-    offline: true,
-    continueReading: books.filter(book => book.progressRatio > 0 && !book.completed).sort((a, b) => String(b.lastReadAt).localeCompare(String(a.lastReadAt))).slice(0, 12),
-    recentlyAdded: books.sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt))).slice(0, 18),
+  if (url.pathname === '/api/v1/home') {
+    let highlights = 0
+    // Local state includes queued creations/deletions. Untouched books use the
+    // highlight snapshot included in their committed offline package.
+    for (let offset = 0; offset < books.length; offset += 8) {
+      const counts = await Promise.all(books.slice(offset, offset + 8).map(async book => {
+        const key = stateKey(book.id, '/highlights')
+        const saved = stored.find(row => row.key === key)?.value ?? await snapshot(ctx, key)
+        return saved?.highlights?.length ?? 0
+      }))
+      highlights += counts.reduce((sum, count) => sum + count, 0)
+    }
+    assertContext(ctx)
+    return {
+      offline: true,
+      readingStats: { inProgress: books.filter(book => book.progressRatio > 0 && !book.completed).length, completed: books.filter(book => book.completed).length, highlights },
+      continueReading: books.filter(book => book.progressRatio > 0 && !book.completed).sort((a, b) => String(b.lastReadAt).localeCompare(String(a.lastReadAt))).slice(0, 12),
+      recentlyAdded: books.sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt))).slice(0, 18),
+    }
   }
   const query = (url.searchParams.get('q') ?? '').trim(), search = query.toLocaleLowerCase()
   const filtered = books.filter(book => {

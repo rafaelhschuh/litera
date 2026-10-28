@@ -70,6 +70,8 @@ Progress must be persisted per user and book using a format-aware locator.
 ### FR-008 — Continue Reading
 Users must see books with active progress and resume them directly.
 
+The modern Home also offers a compact personal summary of in-progress books, completed books and saved highlights. Counts cover available logical books in authorized libraries, independent of shelf limits or dismissal from Continue Reading. Completion follows persisted state rather than a new progress threshold. Offline counts cover only downloaded books, including local pending changes, and state that scope. The simplified legacy Home keeps its existing shelves.
+
 ### FR-009 — Responsive editorial interface
 The web UI must support notebook/desktop, tablet, and mobile layouts without making the library or reader unusable.
 

@@ -582,6 +582,8 @@ Desktop
 - progresso sempre visualmente consistente;
 - se não há leitura ativa, a seção desaparece ou usa `EmptyState` útil;
 - evitar dashboard com métricas irrelevantes ao leitor.
+- Resumo pessoal opcional acima das estantes: **Em leitura**, **Concluídos** e **Destaques**, em uma linha discreta com números editoriais e separadores. Sem gráficos, slogans ou novos cards. Em celulares, preservar três colunas e a ausência do título visual do módulo.
+- Contar todos os livros lógicos disponíveis nos acervos autorizados, sem o limite das estantes e sem duplicar arquivos do mesmo livro. Conclusão usa o estado persistido; ocultar de Continuar leitura não encerra a leitura. Destaques são privados da conta. Offline, contar apenas os livros do dispositivo e informar esse escopo.
 
 ---
 

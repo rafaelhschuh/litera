@@ -152,3 +152,7 @@ Text reading also offers independent top/bottom margins, each 0–160px (4px ran
 ## Offline download feedback
 
 `OfflineBookControl` groups download/cancel actions and reuses the shared spinner, native progress and field/status text. Preparation and final confirmation use indeterminate progress; transfer shows completed EPUB chapters or PDF pages, with at most 99% until final confirmation. Received bytes are separate from the semantic unit count. The live status announces phase changes; byte updates are supplementary text. Keep retry actionable and explain that a cancelled update preserves the previous download. Details: [ADR-0016](../decisions/ADR-0016-offline-download-pipeline.md).
+
+## Home reading summary
+
+The `stat-grid--reading` variant presents three personal counts in a compact, semantic definition list: books in progress, completed books and saved highlights. It reuses the editorial numeric type, secondary labels, spacing and border tokens, with subtle separators and no card backgrounds, shadows or counters in motion. All three columns remain on one row on phones. Missing statistics omit this optional summary; catalog loading/error states remain shared. Offline counts explicitly cover only books on this device. Legacy keeps the existing simplified Home.

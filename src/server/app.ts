@@ -210,7 +210,17 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   app.get('/api/v1/home', requireUser, (req, res) => {
     const continueReading = db.prepare(`${bookSelect()} WHERE p.progress_ratio > 0 AND p.completed=0 AND p.dismissed_from_continue=0 GROUP BY b.id ORDER BY p.last_read_at DESC LIMIT 12`).all(...bookParams(req)).map(mapBook)
     const recentlyAdded = db.prepare(`${bookSelect()} GROUP BY b.id ORDER BY b.added_at DESC LIMIT 18`).all(...bookParams(req)).map(mapBook)
-    res.json({ continueReading, recentlyAdded })
+    // Count logical books once across authorized libraries, independently of
+    // the limited shelves and of dismissing a book from Continue Reading.
+    const readingStats = db.prepare(`WITH accessible AS (
+      SELECT DISTINCT f.book_id FROM book_files f WHERE f.status='available'
+        AND (?='admin' OR EXISTS (SELECT 1 FROM user_libraries ul WHERE ul.library_id=f.library_id AND ul.user_id=?))
+    ) SELECT
+      (SELECT COUNT(*) FROM reading_progress p JOIN accessible a ON a.book_id=p.book_id WHERE p.user_id=? AND p.completed=0 AND p.progress_ratio>0) AS inProgress,
+      (SELECT COUNT(*) FROM reading_progress p JOIN accessible a ON a.book_id=p.book_id WHERE p.user_id=? AND p.completed=1) AS completed,
+      (SELECT COUNT(*) FROM highlights h JOIN accessible a ON a.book_id=h.book_id WHERE h.user_id=?) AS highlights`
+    ).get(req.user!.role, req.user!.id, req.user!.id, req.user!.id, req.user!.id)
+    res.json({ continueReading, recentlyAdded, readingStats })
   })
   app.get('/api/v1/books', requireUser, (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
