@@ -6,7 +6,7 @@ async function openBook(page: Page, title: string, adapted = false) {
   await page.getByLabel('Senha', { exact: true }).fill('test-password-strong-123')
   await page.getByRole('button', { name: 'Entrar', exact: true }).click()
   await page.waitForURL('/')
-  await page.request.put('/api/v1/settings', { data: { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false } })
+  await page.request.put('/api/v1/settings', { data: { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll' } })
   await page.goto('/library')
   await page.getByRole('link', { name: new RegExp(title) }).first().click()
   await page.waitForURL(/\/books\/\d+$/)
@@ -57,6 +57,7 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Aumentar texto', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect.poll(async () => active(page).locator('.reader-document').evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(19.8, 2)
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await page.keyboard.press('PageDown')
@@ -142,6 +143,7 @@ test('PDF: direct adapted opening, readable paragraphs, restore and extracted il
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Aumentar texto', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect.poll(scroll).toBeGreaterThan(0)
   let screens = 0
   while (await stage.evaluate(el => el.scrollTop < el.scrollHeight - el.clientHeight - 2)) {
@@ -214,11 +216,18 @@ test('touch, footnotes, responsive viewports and PWA metadata', async ({ page },
   for (const [width, height] of [[360, 800], [390, 844], [393, 852], [430, 932], [768, 1024], [1024, 768]]) {
     await page.setViewportSize({ width, height })
     await expect.poll(async () => page.locator('.reader-shell').evaluate(el => Math.round(el.getBoundingClientRect().height))).toBe(height)
+    await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+    await page.getByRole('button', { name: 'Abrir sumário' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 1', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(active(page).locator('h1')).toHaveText('Chegada')
+    await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
     await expect(active(page).locator('.reader-document')).toBeVisible()
-    const before = await position(page)
     if (info.project.name === 'webkit') await page.touchscreen.tap(width - 30, height / 2)
     else await page.mouse.click(width - 30, height / 2)
-    await expect.poll(async () => (await position(page)).y).toBeGreaterThan(before.y)
+    await expect(active(page).locator('h1')).toHaveText('Travessia')
+    await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+    await expect.poll(async () => (await position(page)).y).toBe(0)
     // Native click must not execute a second reader command after pointerup.
     const after = await position(page)
     await expect.poll(async () => (await position(page)).y).toBe(after.y)
@@ -252,9 +261,11 @@ test('EPUB chapter commit keeps an outgoing presentation and reverses correctly'
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Páginas pela tela', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Abrir sumário' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 2' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(active(page).locator('h1')).toHaveText('Travessia')
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await page.keyboard.press('ArrowLeft')
@@ -263,13 +274,15 @@ test('EPUB chapter commit keeps an outgoing presentation and reverses correctly'
   await expect.poll(() => active(page).locator('.reader-pages').evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
   const native = await page.evaluate(() => typeof document.startViewTransition === 'function')
   if (native) await page.evaluate(() => {
-    let count = 0
-    const hold = (event: AnimationEvent) => {
-      if (!['reader-in', 'reader-out'].includes(event.animationName)) return
-      for (const animation of document.getAnimations()) if (['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName)) { animation.pause(); animation.currentTime = 120 }
-      if (++count === 2) document.removeEventListener('animationstart', hold)
+    const start = document.startViewTransition.bind(document)
+    document.startViewTransition = update => {
+      document.startViewTransition = start
+      const transition = start(update)
+      void transition.ready.then(() => {
+        for (const animation of document.getAnimations()) if (['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName)) { animation.pause(); animation.currentTime = 120 }
+      })
+      return transition
     }
-    document.addEventListener('animationstart', hold)
   })
   await page.keyboard.press('ArrowLeft')
   if (native) {
@@ -437,6 +450,7 @@ test('EPUB: chapter changes always start at the top and exact repeated highlight
   await expect.poll(async () => (await position(page)).y).toBe(0)
   await page.getByRole('button', { name: 'Abrir sumário' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 1', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   // A backward selection of the second occurrence in the SAME text node.
   await active(page).locator('#repeated-1').evaluate(el => {
@@ -464,6 +478,7 @@ test('EPUB: chapter changes always start at the top and exact repeated highlight
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Sépia', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect.poll(placement).toBe('Eunice chegou. <mark>Eunice</mark> ficou. Eunice saiu.')
   await expect(active(page).locator('#nested-1 em mark')).toHaveCount(2)
 })
@@ -476,6 +491,7 @@ test('EPUB: viewport pages, chapter navigation, rotation and saved mode retain t
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Páginas pela tela', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   const metrics = () => active(page).locator('.reader-pages').evaluate(el => ({ x: el.scrollLeft, y: el.scrollTop, width: el.clientWidth, height: el.clientHeight, scrollHeight: el.scrollHeight, total: Math.ceil((el.scrollWidth - 1) / el.clientWidth) }))
   await expect(active(page).locator('.reader-pages')).toBeVisible()
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
@@ -512,6 +528,7 @@ test('EPUB: viewport pages, chapter navigation, rotation and saved mode retain t
   expect(delta).toBeGreaterThanOrEqual(0); expect(delta).toBeLessThan(844)
   await page.getByRole('button', { name: 'Abrir sumário' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 2', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await expect.poll(async () => (await metrics()).x).toBe(0)
   await page.keyboard.press('ArrowLeft')
@@ -521,6 +538,7 @@ test('EPUB: viewport pages, chapter navigation, rotation and saved mode retain t
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Rolagem por capítulo', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(active(page).locator('.reader-pages')).toHaveCount(0)
   await expect.poll(async () => (await position(page)).y).toBeGreaterThan(0)
 })

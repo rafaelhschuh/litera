@@ -74,23 +74,27 @@ test.describe('mobile navigation and reader preparation', () => {
     await expect.poll(() => nextRequests).toBe(1)
     await page.getByRole('button', { name: 'Abrir sumário' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 2', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
     await ready(page)
     await expect(active(page).locator('h1')).toHaveText('Travessia')
     expect(nextRequests).toBe(1)
     await page.getByRole('button', { name: 'Configurações de leitura' }).click()
     await page.getByRole('button', { name: 'Páginas pela tela', exact: true }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
     await ready(page)
     for (const key of ['ArrowRight', 'ArrowLeft']) {
       const native = await page.evaluate(() => typeof document.startViewTransition === 'function')
       if (native) await page.evaluate(() => {
-        let count = 0
-        const hold = (event: AnimationEvent) => {
-          if (!['reader-in', 'reader-out'].includes(event.animationName)) return
-          for (const animation of document.getAnimations()) if (['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName)) { animation.pause(); animation.currentTime = 120 }
-          if (++count === 2) document.removeEventListener('animationstart', hold)
+        const start = document.startViewTransition.bind(document)
+        document.startViewTransition = update => {
+          document.startViewTransition = start
+          const transition = start(update)
+          void transition.ready.then(() => {
+            for (const animation of document.getAnimations()) if (['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName)) { animation.pause(); animation.currentTime = 120 }
+          })
+          return transition
         }
-        document.addEventListener('animationstart', hold)
       })
       await page.keyboard.press(key)
       if (native) {
@@ -104,6 +108,7 @@ test.describe('mobile navigation and reader preparation', () => {
         expect(result.direction).toBe(key === 'ArrowRight' ? '1' : '-1')
         for (const frames of result.frames) expect(frames.every(frame => frame.opacity === undefined || frame.opacity === '1')).toBe(true)
         await page.evaluate(() => document.getAnimations().forEach(animation => animation.finish()))
+        await expect(page.locator('html')).not.toHaveAttribute('data-reader-turn')
       }
     }
     await active(page).locator('.reader-document').evaluate(el => {
