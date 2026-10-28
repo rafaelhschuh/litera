@@ -222,6 +222,54 @@ describe(`offline sync in ${engine.name()}`, () => {
     expect(await page.evaluate(`queue()`)).toHaveLength(2)
   })
 
+  it('does not lose a flush requested during an existing drain', async () => {
+    await page.clock.install()
+    let releaseHealth: (() => Promise<void>) | undefined
+    await page.route('**/health', route => { releaseHealth = () => route.fulfill({ json: { status: 'ok' } }) })
+    await page.evaluate(`s.syncState.online=false;void s.flushOfflineSync()`)
+    await expect.poll(() => Boolean(releaseHealth)).toBe(true)
+    await page.evaluate(`(async()=>{await save(.4);void s.flushOfflineSync()})()`)
+    await releaseHealth!()
+    await expect.poll(() => remote.progress?.progressRatio).toBe(.4)
+    await expect.poll(() => page.evaluate(`s.syncState.pending`)).toBe(0)
+  })
+
+  it('suspends a rejected session without discarding its pending changes', async () => {
+    await page.clock.install()
+    let attempts = 0
+    await page.route('**/api/v1/auth/me', route => { attempts++; return route.fulfill({ status: 401, json: { error: { message: 'Session expired' } } }) })
+    await page.evaluate(`(async()=>{await save(.6);await s.flushOfflineSync();await s.flushOfflineSync()})()`)
+    expect(await page.evaluate(`s.syncState.requiresLogin`)).toBe(true)
+    expect(await page.evaluate(`s.syncState.pending`)).toBe(1)
+    expect(attempts).toBe(1)
+    expect(remote.progress).toBe(null)
+    await page.unroute('**/api/v1/auth/me')
+    await page.evaluate(`s.syncState.requiresLogin=false;s.flushOfflineSync()`)
+    await expect.poll(() => remote.progress?.progressRatio).toBe(.6)
+  })
+
+  it('automatically recovers pending changes without a browser online event', async () => {
+    await page.clock.install()
+    serverDown = true
+    await page.evaluate(`(async()=>{await save(.45);s.initializeOfflineSync()})()`)
+    await expect.poll(() => page.evaluate(`s.syncState.online`)).toBe(false)
+    serverDown = false
+    await page.clock.runFor(31_000)
+    await expect.poll(() => remote.progress?.progressRatio).toBe(.45)
+    await expect.poll(() => page.evaluate(`s.syncState.pending`)).toBe(0)
+  })
+
+  it('automatically resumes on pageshow with the existing durable queue', async () => {
+    await page.clock.install()
+    serverDown = true
+    await page.evaluate(`(async()=>{await save(.35);s.initializeOfflineSync()})()`)
+    await expect.poll(() => page.evaluate(`s.syncState.online`)).toBe(false)
+    serverDown = false
+    await page.evaluate(`(async()=>{await queue(true);window.dispatchEvent(new Event('pageshow'))})()`)
+    await expect.poll(() => remote.progress?.progressRatio).toBe(.35)
+    await expect.poll(() => page.evaluate(`s.syncState.pending`)).toBe(0)
+  })
+
   it('serves only downloads during a real outage and recovers without online events or pending operations', async () => {
     await page.evaluate(`(async()=>{
       const stage=await store.beginOfflineDownload(1,1),path='/api/v1/books/1';

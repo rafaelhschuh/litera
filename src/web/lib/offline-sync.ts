@@ -27,8 +27,10 @@ const owner = Math.random().toString(36).slice(2)
 let database: Promise<IDBDatabase> | undefined
 let timer: ReturnType<typeof setTimeout> | undefined
 let running: Promise<void> | undefined
+let rerunRequested = false
 let cleanup: (() => void) | undefined
 let probeFailures = 0
+const WAKEUP_KEY = 'litera-reading-wakeup'
 const controllers = new Set<AbortController>()
 const defaultPreferences = { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll', ...defaultReaderTypography }
 function operationId(): string {
@@ -36,10 +38,14 @@ function operationId(): string {
   crypto.getRandomValues(bytes)
   return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('')
 }
+function notifyReadingTabs(): void {
+  // A wakeup token only; each receiver reads its own authenticated queue.
+  try { localStorage.setItem(WAKEUP_KEY, operationId()) } catch { /* Foreground/periodic recovery remains available. */ }
+}
 
 export const syncState = reactive({
   online: typeof navigator === 'undefined' || navigator.onLine !== false,
-  pending: 0, syncing: false, message: '', lastSyncedAt: null as string | null,
+  pending: 0, failed: 0, syncing: false, requiresLogin: false, message: '', lastSyncedAt: null as string | null,
   conflicts: [] as Array<{ bookId: number; kind: 'progress' }>,
 })
 
@@ -123,7 +129,10 @@ async function network<T>(url: string, options: RequestInit = {}, ctx?: Context)
       return {}
     })
     if (ctx) assertContext(ctx)
-    if (!response.ok) throw new ApiError(body?.error?.message ?? 'Não foi possível concluir a solicitação.', response.status, body?.error?.code)
+    if (!response.ok) {
+      if (ctx && (response.status === 401 || body?.error?.code === 'SESSION_USER_MISMATCH')) syncState.requiresLogin = true
+      throw new ApiError(body?.error?.message ?? 'Não foi possível concluir a solicitação.', response.status, body?.error?.code)
+    }
     syncState.online = true
     return body as T
   } catch (error) {
@@ -343,15 +352,18 @@ async function mutate(ctx: Context, url: string, method: string, kind: Kind, opt
   }, ctx)
   await refresh(ctx).catch(() => undefined)
   assertContext(ctx)
+  notifyReadingTabs()
   schedule(500)
   return result
 }
 
 async function refresh(ctx = context()): Promise<void> {
-  if (!ctx) { syncState.pending = 0; syncState.conflicts = []; return }
+  if (!ctx) { syncState.pending = 0; syncState.failed = 0; syncState.conflicts = []; return }
   const pending = await transaction('readonly', tx => operations(tx, ctx.userId), ctx)
   assertContext(ctx)
   syncState.pending = pending.length
+  syncState.failed = pending.filter(op => op.phase === 'failed').length
+  if (!syncState.message && syncState.failed) syncState.message = pending.find(op => op.phase === 'failed')?.error ?? 'Uma alteração não pôde ser sincronizada.'
   syncState.conflicts = [...new Set(pending.filter(op => op.kind === 'progress' && op.phase === 'conflict').map(op => op.bookId!))].map(bookId => ({ bookId, kind: 'progress' as const }))
 }
 function schedule(delay: number): void {
@@ -392,6 +404,7 @@ async function acknowledge(ctx: Context, op: Operation, body: any): Promise<void
       for (const item of successors) if (item.kind === 'highlight-delete' && item.tempId === op.tempId) { item.url = `/api/v1/highlights/${highlight.id}`; item.tempId = undefined; tx.pending.put(item) }
     } else if (!successors.length && op.kind === 'settings') putState(tx, ctx, op.key, body)
   }, ctx)
+  notifyReadingTabs()
 }
 async function failed(ctx: Context, op: Operation, error: unknown): Promise<void> {
   let server: any
@@ -417,13 +430,18 @@ async function drain(ctx: Context): Promise<void> {
   await importLegacyDrafts(ctx)
   await refresh(ctx)
   if (navigator.onLine === false) { syncState.online = false; return }
+  if (syncState.requiresLogin) return
   if (!syncState.pending) {
     if (!syncState.online) await network('/health', {}, ctx)
+    syncState.message = ''
     probeFailures = 0
     return
   }
   const session = await network<{ user: { id: number } }>('/api/v1/auth/me', {}, ctx)
-  if (session.user.id !== ctx.userId) throw new ApiError('A sessão pertence a outra conta. Entre novamente antes de sincronizar.', 409, 'SESSION_USER_MISMATCH')
+  if (session.user.id !== ctx.userId) {
+    syncState.requiresLogin = true
+    throw new ApiError('A sessão pertence a outra conta. Entre novamente antes de sincronizar.', 409, 'SESSION_USER_MISMATCH')
+  }
   probeFailures = 0
   syncState.syncing = true
   let op: Operation | undefined
@@ -446,13 +464,15 @@ async function drain(ctx: Context): Promise<void> {
   if (!syncState.pending) syncState.message = ''
   const pending = await transaction('readonly', tx => operations(tx, ctx.userId), ctx)
   const heads = new Map<string, Operation>()
-  for (const item of pending.sort((a, b) => a.sequence - b.sequence)) if (!heads.has(item.key)) heads.set(item.key, item)
+  for (const item of pending.sort((a, b) => a.sequence - b.sequence)) if (item.phase !== 'failed' && !heads.has(item.key)) heads.set(item.key, item)
   const retryable = [...heads.values()].filter(item => item.phase === 'queued' || item.phase === 'sent')
   if (retryable.length) schedule(Math.max(1000, Math.min(...retryable.map(item => Math.max(item.nextAttemptAt, item.leaseOwner !== owner ? item.leaseUntil ?? 0 : 0))) - Date.now()))
 }
 
 export async function flushOfflineSync(): Promise<void> {
-  if (running) return running
+  // A mutation/reconnect can arrive after the last claim but before drain
+  // settles. Remember that wakeup instead of leaving the queue idle.
+  if (running) { rerunRequested = true; return running }
   const ctx = context()
   if (!ctx) { await refresh(); return }
   if (timer) clearTimeout(timer)
@@ -461,8 +481,24 @@ export async function flushOfflineSync(): Promise<void> {
     if (ctx.userId !== getOfflineUser() || ctx.generation !== offlineContext.generation) return
     syncState.message = error instanceof Error ? error.message : 'Não foi possível sincronizar.'
     if (transient(error)) { syncState.online = false; probeFailures++; schedule(Math.min(60_000, 2000 * 2 ** Math.min(probeFailures, 5))) }
-  }).finally(() => { running = undefined; syncState.syncing = false })
+  }).finally(() => {
+    running = undefined; syncState.syncing = false
+    if (rerunRequested) { rerunRequested = false; void flushOfflineSync() }
+  })
   return running
+}
+
+/** Explicit retry only; terminal server rejections must not loop automatically. */
+export async function retryOfflineSync(): Promise<void> {
+  const ctx = context()
+  if (!ctx) return
+  await transaction('readwrite', async tx => {
+    for (const op of await operations(tx, ctx.userId)) if (op.phase === 'failed') {
+      op.phase = 'queued'; op.nextAttemptAt = 0; op.leaseUntil = 0
+      tx.pending.put(op)
+    }
+  }, ctx)
+  await flushOfflineSync()
 }
 
 export function initializeOfflineSync(): () => void {
@@ -470,18 +506,25 @@ export function initializeOfflineSync(): () => void {
   const online = () => { syncState.online = true; void flushOfflineSync() }
   const offline = () => { syncState.online = false }
   const foreground = () => { if (document.visibilityState === 'visible') void flushOfflineSync() }
+  const wakeup = (event: StorageEvent) => { if (event.key === WAKEUP_KEY) void flushOfflineSync() }
+  const poll = setInterval(() => {
+    if (document.visibilityState !== 'hidden' && navigator.onLine !== false && context() && !syncState.requiresLogin && (syncState.pending || !syncState.online)) void flushOfflineSync()
+  }, 30_000)
   const account = () => {
     for (const controller of controllers) controller.abort()
     if (timer) clearTimeout(timer)
-    syncState.pending = 0; syncState.conflicts = []; syncState.message = ''; syncState.lastSyncedAt = null
+    syncState.pending = 0; syncState.failed = 0; syncState.requiresLogin = false; syncState.conflicts = []; syncState.message = ''; syncState.lastSyncedAt = null
     void (running ?? Promise.resolve()).finally(() => { void flushOfflineSync() })
   }
   window.addEventListener('online', online); window.addEventListener('offline', offline)
+  window.addEventListener('focus', foreground); window.addEventListener('pageshow', foreground); window.addEventListener('storage', wakeup)
   window.addEventListener('litera-account-changed', account); document.addEventListener('visibilitychange', foreground)
   cleanup = () => {
     window.removeEventListener('online', online); window.removeEventListener('offline', offline)
+    window.removeEventListener('focus', foreground); window.removeEventListener('pageshow', foreground); window.removeEventListener('storage', wakeup)
     window.removeEventListener('litera-account-changed', account); document.removeEventListener('visibilitychange', foreground)
     if (timer) clearTimeout(timer)
+    clearInterval(poll)
     cleanup = undefined
   }
   void flushOfflineSync()
@@ -533,4 +576,5 @@ export async function resolveProgressConflict(bookId: number, choice: 'server'):
   }, ctx)
   await refresh(ctx)
   syncState.message = ''
+  notifyReadingTabs()
 }

@@ -27,6 +27,7 @@ export async function rememberSession(user: User): Promise<void> {
   auth.user = user
   store(OFFLINE_SESSION_KEY, JSON.stringify(user))
   setActiveOfflineUser(user.id)
+  syncState.requiresLogin = false
   void flushOfflineSync()
 }
 
@@ -42,6 +43,9 @@ function forgetSession(): void {
   setActiveOfflineUser()
   auth.user = null
 }
+
+/** Reauthenticate without deleting the account's unsent reading changes. */
+export function requestSignIn(): void { forgetSession() }
 
 export async function loadSession(): Promise<void> {
   if (stored(LOGOUT_KEY)) { forgetSession(); await completePendingLogout(); auth.ready = true; return }

@@ -703,7 +703,9 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
 
   const webRoot = path.join(projectRoot, 'dist/web')
   if (fs.existsSync(webRoot)) {
-    app.use(express.static(webRoot, { index: false }))
+    app.use(express.static(webRoot, { index: false, setHeaders: (res, filePath) => {
+      if (path.basename(filePath) === 'sw.js') res.setHeader('Cache-Control', 'no-store')
+    } }))
   }
   app.use((req, res, next) => {
     if (req.path.startsWith('/assets/') || req.path.startsWith('/icons/') || /\.(?:js|mjs|css|map|woff2?|ttf|otf|png|jpe?g|svg|webp|ico|webmanifest)$/i.test(req.path)) { res.status(404).type('text').send('Asset not found'); return }

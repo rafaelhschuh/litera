@@ -246,6 +246,7 @@ describe('shell-only service worker', () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); vi.resetModules() })
 
 async function browserHarness(controlled = true) {
+  vi.useFakeTimers()
   vi.stubEnv('DEV', false)
   const service = Object.assign(new EventTarget(), { controller: null as any, ready: Promise.resolve(null as any), getRegistration: vi.fn(async () => undefined as any), register: vi.fn() })
   const worker = { postMessage: vi.fn((message: any, ports: any[]) => ports[0].postMessage(message.type === 'LITERA_SHELL_STATUS'
@@ -268,6 +269,42 @@ async function browserHarness(controlled = true) {
 }
 
 describe('browser shell lifecycle', () => {
+  it('checks an existing registration at startup and polls while the app stays open', async () => {
+    const h = await browserHarness()
+    h.service.getRegistration.mockResolvedValue(h.registration)
+    h.module.initializePwa()
+    await vi.waitFor(() => expect(h.registration.update).toHaveBeenCalled())
+    const count = h.registration.update.mock.calls.length
+    h.registration.update.mockImplementation(async () => { h.registration.waiting = { postMessage: vi.fn() } })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(h.registration.update.mock.calls.length).toBeGreaterThan(count)
+    expect(h.module.pwaUpdate.available).toBe(true)
+    expect(h.module.pwaUpdate.promptVersion).toBe(1)
+    expect(h.registration.waiting.postMessage).not.toHaveBeenCalled()
+  })
+
+  it('pauses update polling in the background and checks on foreground', async () => {
+    const h = await browserHarness()
+    h.service.getRegistration.mockResolvedValue(h.registration)
+    h.module.initializePwa()
+    await vi.waitFor(() => expect(h.registration.update).toHaveBeenCalled())
+    h.document.visibilityState = 'hidden'
+    const count = h.registration.update.mock.calls.length
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(h.registration.update).toHaveBeenCalledTimes(count)
+    h.document.visibilityState = 'visible'
+    h.document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(h.registration.update.mock.calls.length).toBeGreaterThan(count))
+  })
+
+  it('coalesces overlapping explicit update checks', async () => {
+    const h = await browserHarness()
+    h.service.getRegistration.mockResolvedValue(h.registration)
+    await Promise.all([h.module.checkForPwaUpdate(true), h.module.checkForPwaUpdate(true)])
+    expect(h.registration.update).toHaveBeenCalledOnce()
+    expect(h.module.pwaUpdate.checking).toBe(false)
+  })
+
   it('waits for page control and worker confirmation, coalescing concurrent downloads', async () => {
     const h = await browserHarness(false)
     // Safari/WebKit may activate and control the page before register() settles.

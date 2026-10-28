@@ -133,6 +133,10 @@ Logout oculta imediatamente a conta, repete a limpeza local até concluí-la e i
 
 Uma sessão expirada exige novo login, sem apagar automaticamente a fila pendente. Autentique a mesma conta para retomar a sincronização; outra conta não recebe acesso a esses dados.
 
+O aplicativo verifica atualizações ao abrir, voltar à janela, reconectar e a cada minuto enquanto visível. Uma versão pronta abre um pop-up com **Atualizar agora** e **Depois**; a oferta aguarda a saída do leitor e a aplicação aguarda downloads em andamento. **Preferências → Atualização do aplicativo** permite verificar/reabrir a oferta. Não há reload automático da leitura.
+
+Conexão e pendências aparecem num indicador expansível, acima da barra móvel. A sincronização funciona sem configuração: envia alterações ao gravar, abrir, voltar e reconectar, com conferência periódica de 30 segundos enquanto visível. Falhas temporárias retomam automaticamente; conflito de posição e sessão expirada exigem ação. A fila sobrevive ao fechamento e retoma ao reabrir; o navegador encerrado não executa sincronização. Detalhes em [ADR-0017](docs/decisions/ADR-0017-app-update-and-sync-feedback.md).
+
 O `/legacy` continua online. Administração exige conexão. Pacotes antigos da 0.4 devem ser salvos novamente para receber o conjunto completo da 0.5. Consulte [`ADR-0009`](docs/decisions/ADR-0009-offline-packages-and-outbox.md) e o [checklist de validação offline](docs/development/offline-validation.md). Testes Playwright Chromium/WebKit não substituem validação física em Safari/PWA.
 
 ## Metadata opcional

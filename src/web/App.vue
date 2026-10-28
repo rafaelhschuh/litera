@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { auth } from './lib/auth'
 import { navigation } from './lib/navigation'
+import OfflineStatus from './components/OfflineStatus.vue'
+import PwaUpdatePrompt from './components/PwaUpdatePrompt.vue'
+import { useRoute } from 'vue-router'
+const currentRoute = useRoute()
 </script>
 
 <template>
@@ -14,4 +18,6 @@ import { navigation } from './lib/navigation'
       </KeepAlive>
     </Transition>
   </RouterView>
+  <OfflineStatus v-if="auth.user && currentRoute.path !== '/login' && !currentRoute.path.startsWith('/read/')" />
+  <PwaUpdatePrompt />
 </template>

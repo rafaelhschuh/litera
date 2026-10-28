@@ -66,6 +66,7 @@ Progress must be persisted per user and book using a format-aware locator.
 - Reopening the book restores the closest valid saved location.
 - A reader configuration change does not arbitrarily reset the saved location.
 - Progress updates are debounced/batched sufficiently to avoid excessive writes.
+- The modern client's durable queue automatically resumes at startup, foreground, reconnection and while visible, without configuration or requiring entry into a book. Transient failures retry; expired sessions retain pending data and require reauthentication, while locator conflicts retain explicit resolution. App updates are opt-in dialogs outside the reader and never force another reading tab to reload. Global connection errors use structured feedback rather than free-standing catalog text.
 
 ### FR-008 — Continue Reading
 Users must see books with active progress and resume them directly.

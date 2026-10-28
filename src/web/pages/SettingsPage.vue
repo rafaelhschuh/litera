@@ -12,6 +12,7 @@ import { api } from '../lib/api'
 import { syncState } from '../lib/offline-sync'
 import { rememberTheme, rememberReducedMotion, type AppTheme } from '../lib/theme'
 import { installPwa, pwaInstall } from '../lib/pwa'
+import { checkForPwaUpdate, offlineSupport, pwaUpdate, showPwaUpdate } from '../lib/pwa-shell'
 import { hasAndroidHost, openAndroidSettings } from '../lib/android-host'
 
 const androidHost = hasAndroidHost()
@@ -25,12 +26,21 @@ onMounted(async () => { try { Object.assign(preferences, (await api<any>('/api/v
 async function save() { try { await api('/api/v1/settings', { method: 'PUT', body: JSON.stringify(preferences) }); previewTheme(preferences.appTheme as AppTheme); rememberReducedMotion(preferences.reducedMotion); notice.value = 'Preferências salvas.'; error.value = '' } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Falha ao salvar.' } }
 async function changePassword() { try { await api('/api/v1/account/password', { method: 'PUT', body: JSON.stringify({ currentPassword: currentPassword.value, newPassword: newPassword.value }) }); currentPassword.value = ''; newPassword.value = ''; notice.value = 'Senha alterada e outras sessões revogadas.'; error.value = '' } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Falha ao alterar a senha.' } }
 async function install(){try{const installed=await installPwa();notice.value=installed?'Litera instalado como aplicativo.':'O navegador ainda não liberou a instalação neste dispositivo.'}catch{error.value='Não foi possível abrir a instalação. Tente pelo menu do navegador.'}}
+async function checkUpdate() {
+  try {
+    error.value = ''; notice.value = ''
+    await checkForPwaUpdate(true)
+    if (pwaUpdate.available) showPwaUpdate()
+    else notice.value = pwaUpdate.installing ? 'A nova versão está sendo preparada. Você será avisado quando estiver pronta.' : 'O aplicativo está atualizado.'
+  } catch { error.value = 'Não foi possível verificar atualizações. Confira a conexão e tente novamente.' }
+}
 </script>
 
 <template>
   <div>
     <header class="page-header"><h1>Preferências</h1></header>
     <OfflineStorage />
+    <section v-if="offlineSupport.supported" class="settings-section"><h2>Atualização do aplicativo</h2><p>O Litera verifica novas versões automaticamente enquanto está aberto.</p><UiButton :disabled="pwaUpdate.checking || !syncState.online" @click="checkUpdate">{{ pwaUpdate.checking ? 'Verificando…' : pwaUpdate.available ? 'Ver atualização disponível' : 'Verificar atualizações' }}</UiButton></section>
     <AppState v-if="loading" kind="loading" />
     <template v-else>
       <UiToast :message="notice" /><p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>

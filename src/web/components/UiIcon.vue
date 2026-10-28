@@ -35,6 +35,8 @@ defineProps<{ name: string; size?: number }>()
     <template v-else-if="name === 'zoom-in'"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4M11 8v6M8 11h6" /></template>
     <template v-else-if="name === 'zoom-out'"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4M8 11h6" /></template>
     <template v-else-if="name === 'refresh'"><path d="M20 6v5h-5M4 18v-5h5M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5" /></template>
+    <template v-else-if="name === 'wifi-off'"><path d="m3 3 18 18M8.5 4.5A16 16 0 0 1 22 8M2 8a16 16 0 0 1 3-2M5 12a10 10 0 0 1 4-2M13 10a10 10 0 0 1 6 2M8 16a6 6 0 0 1 8 0" /><circle cx="12" cy="20" r="1" /></template>
+    <template v-else-if="name === 'info'"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7v.1" /></template>
     <template v-else><circle cx="12" cy="12" r="9" /></template>
   </svg>
 </template>

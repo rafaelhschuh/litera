@@ -156,3 +156,9 @@ Text reading also offers independent top/bottom margins, each 0–160px (4px ran
 ## Home reading summary
 
 The `stat-grid--reading` variant presents three personal counts in a compact, semantic definition list: books in progress, completed books and saved highlights. It reuses the editorial numeric type, secondary labels, spacing and border tokens, with subtle separators and no card backgrounds, shadows or counters in motion. All three columns remain on one row on phones. Missing statistics omit this optional summary; catalog loading/error states remain shared. Offline counts explicitly cover only books on this device. Legacy keeps the existing simplified Home.
+
+## App update and connection feedback
+
+Use the shared `UiDialog` for the global update offer, with primary update and secondary defer actions, existing loading spinner, inline error/retry and ordinary dialog entrance/exit/reduced motion. Defer automatic offers while the reader or another dialog is open. Preferences can reopen an available offer. Active downloads disable application of the update.
+
+Connection/sync feedback is a compact, expandable status surface using existing spacing, surface, border, radius and elevation tokens. It stays out of catalog layout and above the mobile bottom navigation, with a short polite announcement and keyboard-accessible native disclosure. Details expose errors, pending count, explicit retry, sign-in or conflict resolution. No free-standing global status prose above page headings. See [ADR-0017](../decisions/ADR-0017-app-update-and-sync-feedback.md).

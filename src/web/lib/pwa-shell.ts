@@ -18,24 +18,33 @@ export const pwaInstall = reactive<{ available: boolean; installed: boolean; pro
   available: false,
   installed: typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true),
 })
-export const pwaUpdate = reactive({ available: false })
+export const pwaUpdate = reactive({ available: false, checking: false, installing: false, applying: false, promptVersion: 0 })
 
 let initialized = false
 let registration: Promise<ServiceWorkerRegistration> | undefined
 let preparing: Promise<void> | undefined
 let lastUpdateCheck = 0
+let updateCheck: Promise<void> | undefined
+let offeredWorker: ServiceWorker | undefined
 const TIMEOUT = 120_000
 const observedRegistrations = new WeakSet<ServiceWorkerRegistration>()
 
-function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, message: string, timeout = TIMEOUT): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), TIMEOUT)
+    const timer = setTimeout(() => reject(new Error(message)), timeout)
     promise.then(resolve, reject).finally(() => clearTimeout(timer))
   })
 }
 
 function observeRegistration(value: ServiceWorkerRegistration): ServiceWorkerRegistration {
-  const update = () => { pwaUpdate.available = Boolean(value.waiting) }
+  const update = () => {
+    pwaUpdate.available = Boolean(value.waiting)
+    pwaUpdate.installing = Boolean(value.installing && navigator.serviceWorker.controller)
+    if (value.waiting && value.waiting !== offeredWorker) {
+      offeredWorker = value.waiting
+      pwaUpdate.promptVersion++
+    }
+  }
   update()
   if (observedRegistrations.has(value)) return value
   observedRegistrations.add(value)
@@ -137,13 +146,21 @@ export function ensureOfflineShell(): Promise<void> {
   return preparing
 }
 
-function checkForUpdate(): void {
-  if (document.visibilityState === 'hidden' || !navigator.onLine || Date.now() - lastUpdateCheck < 60_000) return
+export function showPwaUpdate(): void { if (pwaUpdate.available) pwaUpdate.promptVersion++ }
+
+/** Check even when an already-installed registration was reused at startup. */
+export function checkForPwaUpdate(force = false): Promise<void> {
+  if (!offlineSupport.supported || document.visibilityState === 'hidden') return Promise.resolve()
+  if (navigator.onLine === false) return force ? Promise.reject(new Error('Conecte-se para verificar atualizações.')) : Promise.resolve()
+  if (updateCheck) return updateCheck
+  if (!force && Date.now() - lastUpdateCheck < 30_000) return Promise.resolve()
   lastUpdateCheck = Date.now()
-  void register().then(async value => {
+  pwaUpdate.checking = true
+  updateCheck = withTimeout(register().then(async value => {
     await value.update()
-    if (!offlineSupport.ready) await ensureOfflineShell()
-  }).catch(() => undefined)
+    observeRegistration(value)
+  }), 'O servidor demorou para responder à verificação de atualização.', 30_000).finally(() => { updateCheck = undefined; pwaUpdate.checking = false })
+  return updateCheck
 }
 
 export function initializePwa(): void {
@@ -158,11 +175,19 @@ export function initializePwa(): void {
     pwaInstall.available = false; pwaInstall.installed = true; pwaInstall.prompt = undefined
   })
   if (!offlineSupport.available) return
-  document.addEventListener('visibilitychange', checkForUpdate)
-  window.addEventListener('pageshow', checkForUpdate)
-  window.addEventListener('online', checkForUpdate)
+  const check = () => { void checkForPwaUpdate().catch(() => undefined) }
+  const reconnect = () => {
+    void checkForPwaUpdate(true).catch(() => undefined)
+    if (!offlineSupport.ready) void ensureOfflineShell().catch(() => undefined)
+  }
+  document.addEventListener('visibilitychange', check)
+  window.addEventListener('focus', check)
+  window.addEventListener('pageshow', check)
+  window.addEventListener('online', reconnect)
+  setInterval(check, 60_000)
   // Do not block mounting or require a book download to install the shell.
   void ensureOfflineShell().catch(() => undefined)
+  check()
 }
 
 export async function installPwa(): Promise<boolean> {
@@ -177,12 +202,16 @@ export async function installPwa(): Promise<boolean> {
 
 /** Call only after explicit consent and after persisting the reader's local state. */
 export async function applyPwaUpdate(): Promise<void> {
-  const value = await register()
-  const waiting = value.waiting
-  if (!waiting) { pwaUpdate.available = false; return }
-  const controlled = waitForController(waiting)
-  waiting.postMessage({ type: 'LITERA_APPLY_UPDATE' })
-  await controlled
-  pwaUpdate.available = false
-  window.location.reload()
+  if (pwaUpdate.applying) return
+  pwaUpdate.applying = true
+  try {
+    const value = await register()
+    const waiting = value.waiting
+    if (!waiting) { pwaUpdate.available = false; return }
+    const controlled = waitForController(waiting)
+    waiting.postMessage({ type: 'LITERA_APPLY_UPDATE' })
+    await controlled
+    pwaUpdate.available = false
+    window.location.reload()
+  } finally { pwaUpdate.applying = false }
 }
