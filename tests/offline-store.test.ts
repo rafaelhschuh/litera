@@ -14,6 +14,7 @@ for (const name of ['offline-store', 'offline-context', 'pwa']) {
     .replaceAll("from 'vue'", "from '/vue.js'").replaceAll("from '../../shared/epub-document'", "from '/shared/epub-document.js'").replace(/from '\.\/([^']+)'/g, "from '/$1.js'"))
 }
 modules.set('/shared/epub-document.js', ts.transpileModule(fs.readFileSync(new URL('../src/shared/epub-document.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
+modules.set('/shared/reader-typography.js', ts.transpileModule(fs.readFileSync(new URL('../src/shared/reader-typography.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
 modules.set('/vue.js', fs.readFileSync(new URL('../node_modules/vue/dist/vue.runtime.esm-browser.js', import.meta.url), 'utf8'))
 modules.set('/pwa-shell.js', `export const offlineSupport={available:true,message:''};export const pwaInstall={};export const pwaUpdate={};export async function ensureOfflineShell(){if(window.failShell)throw Error('Shell indisponível');if(window.waitShell){window.shellStarted=true;await new Promise(resolve=>window.finishShell=resolve);window.shellFinished=true}};export function initializePwa(){};export function installPwa(){};export function applyPwaUpdate(){}`)
 
