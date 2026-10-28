@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppState from '../components/AppState.vue'
 import BookGrid from '../components/BookGrid.vue'
 import PageRefresh from '../components/PageRefresh.vue'
+import UiIcon from '../components/UiIcon.vue'
 import { api } from '../lib/api'
 import { usePageData } from '../lib/page-data'
 const route = useRoute(), router = useRouter()
@@ -25,4 +26,28 @@ watch(() => route.query.q, value => {
   if (next !== submitted.value) { q.value = next; submitted.value = next; void refresh() }
 })
 </script>
-<template><div :aria-busy="refreshing"><header class="page-header"><h1>Busca</h1></header><form class="search-hero" role="search" @submit.prevent="search"><label for="search-q">Título ou autor</label><div><input id="search-q" v-model="q" type="search" placeholder="Ex.: Machado de Assis" autofocus /><button class="button button--primary">Buscar</button></div></form><PageRefresh :busy="refreshing" :error="state==='loaded' ? error : ''" @retry="refresh" /><AppState v-if="submitted && state==='loading'" kind="loading" layout="catalog" /><AppState v-else-if="submitted && state==='error'" kind="error" title="A busca não pôde ser concluída"><button @click="search">Tentar novamente</button></AppState><section v-else-if="submitted"><h2>{{ books.length }} {{ books.length===1?'livro encontrado':'livros encontrados' }}</h2><BookGrid v-if="books.length" :books="books" /><AppState v-else kind="empty" title="Nenhum resultado" message="Tente um termo mais curto ou confira a grafia." /></section></div></template>
+<template>
+  <div :aria-busy="refreshing">
+    <header class="page-header"><h1>Busca</h1></header>
+    <form class="search-hero" role="search" @submit.prevent="search">
+      <label for="search-q">Título ou autor</label>
+      <div><input id="search-q" v-model="q" type="search" placeholder="Ex.: Machado de Assis" autofocus /><button class="button button--primary">Buscar</button></div>
+    </form>
+    <PageRefresh :busy="refreshing" :error="state==='loaded' ? error : ''" @retry="refresh" />
+    <nav v-if="!submitted" class="search-explore" aria-labelledby="search-explore-title">
+      <h2 id="search-explore-title">Explorar biblioteca</h2>
+      <ul class="taxonomy-list">
+        <li><RouterLink to="/authors"><strong>Autores</strong><UiIcon name="chevron-right" :size="16" /></RouterLink></li>
+        <li><RouterLink to="/series"><strong>Séries</strong><UiIcon name="chevron-right" :size="16" /></RouterLink></li>
+        <li><RouterLink to="/genres"><strong>Gêneros</strong><UiIcon name="chevron-right" :size="16" /></RouterLink></li>
+      </ul>
+    </nav>
+    <AppState v-else-if="state==='loading'" kind="loading" layout="catalog" />
+    <AppState v-else-if="state==='error'" kind="error" title="A busca não pôde ser concluída"><button class="text-link" @click="search">Tentar novamente</button></AppState>
+    <section v-else>
+      <h2>{{ books.length }} {{ books.length===1?'livro encontrado':'livros encontrados' }}</h2>
+      <BookGrid v-if="books.length" :books="books" />
+      <AppState v-else kind="empty" title="Nenhum resultado" message="Tente um termo mais curto ou confira a grafia." />
+    </section>
+  </div>
+</template>

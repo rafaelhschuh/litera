@@ -28,15 +28,17 @@ async function submit() {
 </script>
 <template>
   <main class="auth-layout">
-    <form class="auth-form" aria-labelledby="login-title" :aria-busy="loading" @submit.prevent="submit">
-      <RouterLink class="wordmark" to="/login">LITERA</RouterLink>
-      <h1 id="login-title">Entrar</h1>
-      <p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>
-      <UiField label="Usuário" for-id="username"><input id="username" v-model="username" autocomplete="username" required autofocus :disabled="loading" :aria-invalid="Boolean(error)" /></UiField>
-      <UiField label="Senha" for-id="password"><input id="password" v-model="password" type="password" autocomplete="current-password" required :disabled="loading" :aria-invalid="Boolean(error)" /></UiField>
-      <UiButton type="submit" variant="primary" :disabled="loading"><span v-if="loading" class="loading-spinner" aria-hidden="true"></span>{{ loading ? 'Entrando…' : 'Entrar' }}</UiButton>
-      <p v-if="loading" class="login-progress" role="status" aria-live="polite">{{ status }}</p>
-      <a class="legacy-link" href="/legacy/login">Usar modo de compatibilidade</a>
-    </form>
+    <section class="auth-panel" aria-labelledby="login-title">
+      <header class="auth-brand"><RouterLink class="wordmark" to="/login">LITERA</RouterLink></header>
+      <form class="auth-form" aria-labelledby="login-title" :aria-busy="loading" @submit.prevent="submit">
+        <h1 id="login-title">Entrar</h1>
+        <p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>
+        <UiField label="Usuário" for-id="username"><input id="username" v-model="username" autocomplete="username" required autofocus :disabled="loading" :aria-invalid="Boolean(error)" /></UiField>
+        <UiField label="Senha" for-id="password"><input id="password" v-model="password" type="password" autocomplete="current-password" required :disabled="loading" :aria-invalid="Boolean(error)" /></UiField>
+        <UiButton type="submit" variant="primary" :disabled="loading"><span v-if="loading" class="loading-spinner" aria-hidden="true"></span>{{ loading ? 'Entrando…' : 'Entrar' }}</UiButton>
+        <p v-if="loading" class="login-progress" role="status" aria-live="polite">{{ status }}</p>
+      </form>
+      <footer class="auth-footer"><a class="legacy-link" href="/legacy/login">Usar modo de compatibilidade</a></footer>
+    </section>
   </main>
 </template>

@@ -95,9 +95,11 @@ Before creating a visual component, search this foundation and the existing code
 
 Page headers lead with the destination's title. Do not prepend decorative uppercase labels, repeat the navigation category or add a slogan. Supporting text must explain an action, scope, state or consequence that is useful on that screen; counts and library paths remain appropriate context. Use typography and existing spacing tokens for hierarchy, without ornamental accent rules beneath every title.
 
-Login uses a single centered form with the Litera wordmark, one `h1`, labeled credentials, inline errors, submission status and the compatibility link. It has no promotional panel or tagline. Preserve autocomplete, keyboard submission, initial focus and duplicate-submit protection.
+Page titles use the existing editorial serif stack through `--font-editorial`; section titles and controls keep the interface sans serif. A full-width neutral border separates the page heading from its content. The first catalog section starts directly below that heading, with `space-7` between subsequent sections. The main cover grid uses a 9rem minimum track, retaining the existing tablet and phone overrides. Compact reading cards show two per row when available width permits, using a 20rem minimum, a 6rem cover and existing spacing/radius tokens; horizontal overflow remains usable on smaller screens.
 
-Empty states describe what is missing and a practical next action. Before a search is submitted, the labeled search form is sufficient; show results, no-results or failure feedback only after a query. Keep permission, offline, storage and destructive-action guidance where it affects the user's decision. These changes apply to the modern web client; `/legacy` retains its conservative layout and shared domain behavior.
+Login uses a centered 30rem panel with a wordmark header, one `h1`, labeled credentials, inline errors and submission status. The compatibility link occupies a separate footer. The panel uses existing surface, neutral border and radius tokens, without a promotional column or tagline. Preserve autocomplete, keyboard submission, initial focus and duplicate-submit protection.
+
+Empty states describe what is missing and a practical next action. Before a search is submitted, show the labeled form and ordinary links to authors, series and genres using the existing taxonomy-list pattern. Show results, no-results or failure feedback only after a query. Keep permission, offline, storage and destructive-action guidance where it affects the user's decision. These changes apply to the modern web client; `/legacy` retains its conservative layout and shared domain behavior.
 
 ## Android host boundary
 
