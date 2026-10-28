@@ -1,4 +1,8 @@
-export type EpubAppearance = {
+import { readerFonts, resolveReaderTypography, type ReaderTypography } from './reader-typography.js'
+
+export type EpubNavigationItem = { id: string; label: string; depth: number; href?: string; chapterHref?: string }
+
+export type EpubAppearance = Partial<ReaderTypography> & {
   flow?: 'scroll' | 'paginated'
   fontScale: number
   theme: 'light' | 'sepia' | 'dark'
@@ -10,11 +14,13 @@ export type EpubAppearance = {
 // of a downloaded chapter's identity.
 export function epubAppearanceCss(preferences: EpubAppearance): string {
   const palette = preferences.theme === 'dark' ? ['#20201e', '#eeeeea'] : preferences.theme === 'sepia' ? ['#f4ead6', '#302a21'] : ['#ffffff', '#272520']
-  const scale = Math.min(140, Math.max(80, Number(preferences.fontScale) || 100))
-  const lineHeight = ({ compact: 1.45, normal: 1.65, relaxed: 1.85 })[preferences.lineHeight] ?? 1.65
+  const scale = Math.min(200, Math.max(80, Number(preferences.fontScale) || 100))
+  const typography = resolveReaderTypography(preferences), lineHeight = typography.lineSpacing
   const measure = ({ narrow: 42, normal: 56, wide: 72 })[preferences.margins] ?? 56
-  const flow = preferences.flow === 'paginated' ? `html,body{height:100%;overflow:hidden;overscroll-behavior:none}body{margin:0}.reader-pages{width:100%;height:100vh;overflow:hidden;scroll-behavior:auto;overflow-anchor:none}.reader-pages>.reader-document{box-sizing:border-box;width:100%!important;height:100%;min-height:0;margin:0;padding:5rem var(--epub-gutter) 6rem;--epub-gutter:max(1rem,calc((100vw - ${measure}rem)/2));column-count:1;column-width:auto;column-fill:auto;column-gap:calc(2 * var(--epub-gutter));column-rule:none;overflow-wrap:anywhere}.reader-document img,.reader-document svg{max-height:calc(100vh - 11rem);object-fit:contain}.reader-document p,.reader-document blockquote{break-inside:auto}` : '.reader-document{column-count:1!important;column-width:auto!important;overflow-anchor:none}'
-  return `html,body{background:${palette[0]}!important;color:${palette[1]}!important}.reader-document{font-size:${18 * scale / 100}px!important;line-height:${lineHeight}!important;width:min(${measure}rem,100%)!important}@media(min-width:1100px) and (orientation:landscape){.reader-document{width:min(${measure + 24}rem,calc(100% - 4rem))!important}}${flow}`
+  const flow = preferences.flow === 'paginated' ? `html,body{height:100%;overflow:hidden;overscroll-behavior:none}body{margin:0}.reader-pages{position:relative;width:100%;height:100%;overflow:hidden;scroll-behavior:auto;overflow-anchor:none}.reader-pages::after{content:"";position:absolute;left:calc(var(--epub-page-count,1)*100% - 1px);top:0;width:1px;height:1px;pointer-events:none}.reader-pages>.reader-document{box-sizing:border-box;width:100%!important;height:100%;min-height:0;margin:0;padding:var(--epub-top) var(--epub-gutter) var(--epub-bottom);--epub-gutter:max(${typography.marginSize}px,calc((var(--epub-viewport-width) - ${measure}rem)/2));column-count:1;column-width:auto;column-fill:auto;column-gap:calc(2 * var(--epub-gutter));column-rule:none;overflow-wrap:anywhere}.reader-document img,.reader-document svg{max-height:max(1px,calc(var(--epub-viewport-height) - var(--epub-top) - var(--epub-bottom)));object-fit:contain}.reader-document p,.reader-document blockquote{break-inside:auto}` : `.reader-document{box-sizing:border-box;padding-left:${typography.marginSize}px!important;padding-right:${typography.marginSize}px!important;padding-top:${typography.marginTop}px!important;padding-bottom:${typography.marginBottom}px!important;column-count:1!important;column-width:auto!important;overflow-anchor:none}`
+  const font = typography.fontFamily === 'publisher' ? '' : `.reader-document{font-family:${readerFonts[typography.fontFamily].css}!important}.reader-document *{font-family:inherit!important}.reader-document pre,.reader-document code{font-family:monospace!important}`
+  const align = typography.textAlign === 'publisher' ? '' : `text-align:${typography.textAlign}!important;`
+  return `html{--epub-viewport-width:100vw;--epub-viewport-height:100vh;--epub-top:min(${typography.marginTop}px,max(0px,calc((var(--epub-viewport-height) - 6rem)/2)));--epub-bottom:min(${typography.marginBottom}px,max(0px,calc((var(--epub-viewport-height) - 6rem)/2)))}html,body{background:${palette[0]}!important;color:${palette[1]}!important;scroll-behavior:auto!important}.reader-document{font-size:${18 * scale / 100}px!important;line-height:${lineHeight}!important;letter-spacing:${typography.letterSpacing}em!important;width:min(${measure}rem,100%)!important;${align}}.reader-document p{margin-top:0!important;margin-bottom:${typography.paragraphSpacing}em!important;line-height:inherit!important;${align}}${font}${flow}`
 }
 
 const cssUrlPattern = () => /url\(\s*(?:"((?:\\.|[^"\\\n])*)"|'((?:\\.|[^'\\\n])*)'|((?:\\.|[^\s)'"\\])+))\s*\)/gi

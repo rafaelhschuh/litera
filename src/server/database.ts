@@ -219,6 +219,18 @@ export const migrations = [
       AND NOT EXISTS (SELECT 1 FROM scan_jobs j WHERE j.library_id=l.id AND j.status IN ('queued','running'));
 
   `,
+  `
+  ALTER TABLE reader_preferences ADD COLUMN font_family TEXT NOT NULL DEFAULT 'publisher';
+  ALTER TABLE reader_preferences ADD COLUMN margin_size REAL NOT NULL DEFAULT 24;
+  ALTER TABLE reader_preferences ADD COLUMN line_spacing REAL;
+  ALTER TABLE reader_preferences ADD COLUMN letter_spacing REAL NOT NULL DEFAULT 0;
+  ALTER TABLE reader_preferences ADD COLUMN paragraph_spacing REAL NOT NULL DEFAULT 1;
+  ALTER TABLE reader_preferences ADD COLUMN text_align TEXT NOT NULL DEFAULT 'publisher';
+  `,
+  `
+  ALTER TABLE reader_preferences ADD COLUMN margin_top REAL NOT NULL DEFAULT 80;
+  ALTER TABLE reader_preferences ADD COLUMN margin_bottom REAL NOT NULL DEFAULT 96;
+  `,
 ]
 
 export type LiteraDatabase = Database.Database

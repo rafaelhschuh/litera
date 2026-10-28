@@ -7,6 +7,16 @@
 - Workflow adicional para APK debug e validação Android, sem alterar a versão 0.5.5 ou publicação web/container.
 - Contratos Android, ADR e documentação conectados à raiz. O preview nativo rejeitado não foi integrado; o novo PR WebView aguarda teste e autorização do usuário, sem merge.
 
+## 0.8.0 — 2026-10-27
+
+- EPUB usa os títulos, hierarquia e fragmentos do sumário EPUB 3/NCX, preservando a ordem do spine e usando rótulos de capítulo como fallback. Metadados de head/title deixam de aparecer indevidamente na prosa.
+- Rolagem por capítulo troca de capítulo com setas/swipe; PageUp/PageDown percorrem o capítulo. Paginação por viewport corrige a extensão da última tela e mantém a âncora ao ajustar o layout.
+- Controles compartilhados de fonte, tamanho até 200%, alinhamento, margens laterais/superior/inferior, entrelinhas e espaçamentos de letras/parágrafos. Preferências persistem pela API/outbox, com migrações aditivas e compatibilidade com clientes anteriores.
+- Transições de módulos móveis seguem a posição das abas. Cards expandem e contraem no retorno à lista de origem, incluindo histórico, com cabeçalho/barra acima do conteúdo. Diálogos animam também ao fechar.
+- Swipes EPUB usam a página já renderizada; preparação de fontes/imagens/layout ocorre antes da captura. Removida a espera circular por pintura que causava pausas próximas de cinco segundos. APIs opcionais e movimento reduzido preservam a navegação direta.
+- Corrigidos consumo de fragmentos, referências malformadas, fallback NCX e descarte/identidade de preparações antigas. Pacotes offline antigos precisam ser atualizados para receber HTML e sumário corrigidos; fontes EPUB/PDF não são alteradas.
+- Checagens locais de tipos, lint e build aprovadas; suítes automatizadas ficam a cargo do CI. Android não integra esta release.
+
 ## 0.7.1 — 2026-10-26
 
 - EPUB preserva o caractere visível e sua posição vertical nos dois modos, com seleção do elemento realmente visível, fallback para figuras e preservação da última âncora em páginas sem conteúdo visível.

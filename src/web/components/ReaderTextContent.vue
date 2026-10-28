@@ -20,7 +20,7 @@ const fontRules = computed(() => fontAssets.value.map(asset => `@font-face{font-
 <template>
   <article :aria-busy="loading" class="reader-text-surface" :class="`reader-text-surface--${theme}`">
     <component :is="'style'" v-if="fontRules">{{ fontRules }}</component>
-    <div class="reader-document" :style="contentStyle">
+    <div class="reader-document" :style="contentStyle" :data-text-align="contentStyle.textAlign">
       <p v-if="loading" class="reader-text-status">Preparando esta página…</p>
       <figure v-for="(figure, index) in figures.filter(item => item.asset && item.afterBlock === -1)" :key="`leading-${index}`" class="reader-document__visual"><img :src="assetUrl(figure.asset ?? '')" :width="figure.width" :height="figure.height" alt="Ilustração da página" /></figure>
       <template v-for="(block, index) in blocks" :key="index">

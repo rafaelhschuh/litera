@@ -226,7 +226,7 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   await expect(active(page).locator('.reader-document')).toHaveCSS('font-size', '19.8px')
   await expect(active(page).locator('body')).toHaveCSS('background-color', 'rgb(244, 234, 214)')
   await epubAssets(page, 2)
-  await page.getByRole('button', { name: 'Avançar na leitura' }).click()
+  await page.keyboard.press('PageDown')
   await ready(page)
   await expect.poll(async () => (await epubPosition(page)).elementIndex).toBeGreaterThan(0)
   const epubLocator = await epubPosition(page)

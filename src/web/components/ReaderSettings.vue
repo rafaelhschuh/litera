@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import UiButton from './UiButton.vue'
 import UiSwitch from './UiSwitch.vue'
+import ReaderTypographyFields from './ReaderTypographyFields.vue'
+import type { ReaderTypography } from '../../shared/reader-typography'
 import type { PdfReaderMode, PdfZoomMode } from '../../shared/pdf-reader'
 
 defineProps<{
@@ -13,9 +15,10 @@ defineProps<{
   zoom: number
   zoomMode: PdfZoomMode
 }>()
-const lineHeight = defineModel<'compact' | 'normal' | 'relaxed'>('lineHeight', { required: true })
+defineModel<'compact' | 'normal' | 'relaxed'>('lineHeight', { required: true })
 const margins = defineModel<'narrow' | 'normal' | 'wide'>('margins', { required: true })
 const invert = defineModel<boolean>('invert', { required: true })
+const typography = defineModel<ReaderTypography>('typography', { required: true })
 defineEmits<{
   'epub-flow': [flow: 'scroll' | 'paginated']
   toolbar: [position: 'top' | 'bottom']
@@ -46,6 +49,7 @@ defineEmits<{
         <UiButton :aria-pressed="epubFlow === 'scroll'" @click="$emit('epub-flow', 'scroll')">Rolagem por capítulo</UiButton>
         <UiButton :aria-pressed="epubFlow === 'paginated'" @click="$emit('epub-flow', 'paginated')">Páginas pela tela</UiButton>
       </div>
+      <p class="field__hint">{{ epubFlow === 'scroll' ? 'Role para ler o capítulo. As setas e o swipe lateral mudam de capítulo.' : 'As setas e o swipe lateral avançam uma página da tela.' }}</p>
     </fieldset>
     <fieldset v-if="format === 'pdf'">
       <legend>Modo de leitura</legend>
@@ -60,10 +64,12 @@ defineEmits<{
         <div class="reader-stepper">
           <UiButton aria-label="Diminuir texto" :disabled="textScale <= 80" @click="$emit('text', -10)">−</UiButton>
           <output aria-label="Tamanho do texto">{{ textScale }}%</output>
-          <UiButton aria-label="Aumentar texto" :disabled="textScale >= 140" @click="$emit('text', 10)">+</UiButton>
+          <UiButton aria-label="Aumentar texto" :disabled="textScale >= 200" @click="$emit('text', 10)">+</UiButton>
         </div>
+        <input type="range" aria-label="Ajustar tamanho do texto" :value="textScale" min="80" max="200" step="5" @change="$emit('text', Number(($event.target as HTMLInputElement).value) - textScale)" />
       </fieldset>
-      <label for="lines">Entrelinhas<select id="lines" v-model="lineHeight" @change="$emit('change')"><option value="compact">Compacta</option><option value="normal">Normal</option><option value="relaxed">Relaxada</option></select></label>
+      <ReaderTypographyFields v-model="typography" @change="$emit('change')" />
+      <p v-if="format === 'pdf'" class="field__hint">Alguns trechos do PDF mantêm a fonte original para preservar os caracteres.</p>
       <label for="margins">Largura do texto<select id="margins" v-model="margins" @change="$emit('change')"><option value="narrow">Estreita</option><option value="normal">Normal</option><option value="wide">Ampla</option></select></label>
       <fieldset>
         <legend>Tema</legend>

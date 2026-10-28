@@ -25,3 +25,9 @@ Destaques novos serializam o `Range` ordenado no fluxo textual do capítulo/pág
 - Páginas fixas calculadas uma vez por livro falham em rotação, acessibilidade e mudança de fonte. O layout usa CSS/DOM já suportados pelo cliente moderno; `/legacy` mantém seu fluxo conservador e os mesmos dados/API.
 - Busca textual pelo primeiro resultado não distingue a seleção real. Offsets mais contexto preservam a intenção sem depender do número de linhas visuais ou de um motor nativo paralelo.
 - Mudanças ficam restritas à web/backend; nenhum arquivo Android é alterado. Testes de browser não substituem validação física em dispositivos.
+
+## Complemento — sumário autoral e conteúdo EPUB
+
+O spine permanece responsável pela identidade e ordem dos capítulos. O sumário EPUB 3/NCX é exposto como `navigation` adicional, com rótulos, fragmentos e profundidade; não se transforma cada fragmento em um capítulo novo, pois isso alteraria os índices/locators persistidos. `chapters` conserva seus hrefs e usa rótulos do sumário quando disponíveis, com fallback para clientes e pacotes anteriores.
+
+Metadados de `head/title` não fazem parte da prosa sanitizada. Títulos reais do corpo são preservados, sem heurística de apagar qualquer texto igual ao nome do livro. A coleta de CSS é separada do passe que descarta metadados. Evidência e limites de compatibilidade estão em [Extração de conteúdo e sumário EPUB](../development/epub-navigation-extraction.md).

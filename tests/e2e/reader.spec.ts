@@ -30,15 +30,15 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   for (let turn = 0; turn < 20; turn++) {
     const before = await position(page)
-    await page.keyboard.press(turn % 4 === 3 ? 'ArrowLeft' : 'ArrowRight')
+    await page.keyboard.press(turn % 4 === 3 ? 'PageUp' : 'PageDown')
     await expect.poll(async () => JSON.stringify(await position(page))).not.toBe(JSON.stringify(before))
     await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
     await expect(active(page).locator('.reader-document')).toBeVisible()
     expect(await page.locator('.epub-stage:not(.epub-stage--preparing)').evaluate(el => getComputedStyle(el).transform)).toBe('none')
   }
-  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('PageDown')
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
-  if ((await position(page)).y === 0) await page.keyboard.press('ArrowRight')
+  if ((await position(page)).y === 0) await page.keyboard.press('PageDown')
   await expect.poll(async () => (await position(page)).y).toBeGreaterThan(0)
   const beforeRotate = await position(page)
   await page.setViewportSize({ width: 844, height: 390 })
@@ -51,7 +51,7 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   await active(page).locator('body').evaluate(() => { window.focus(); const el = [...document.querySelectorAll('p')].find(p => p.getBoundingClientRect().top > 0)!; const range = document.createRange(); range.selectNodeContents(el); const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range) })
   await expect(page.getByRole('toolbar', { name: 'Ações do trecho selecionado' })).toBeVisible()
   const selectedPosition = await position(page)
-  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('PageDown')
   expect(await position(page)).toEqual(selectedPosition)
   await page.getByRole('button', { name: 'Fechar ações do trecho' }).click()
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
@@ -59,7 +59,7 @@ test('EPUB: real opening, 20 turns, settings, rotate, restore and selection', as
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
   await expect.poll(async () => active(page).locator('.reader-document').evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeCloseTo(19.8, 2)
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
-  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('PageDown')
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   const savedUrl = page.url()
   const bookId = new URL(savedUrl).pathname.split('/').pop()
@@ -249,6 +249,10 @@ test('EPUB document policy blocks book scripts while reader listeners work', asy
 test('EPUB chapter commit keeps an outgoing presentation and reverses correctly', async ({ page }, info) => {
   await openBook(page, 'A Ilha de Teste')
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
+  await page.getByRole('button', { name: 'Configurações de leitura' }).click()
+  await page.getByRole('button', { name: 'Páginas pela tela', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   await page.getByRole('button', { name: 'Abrir sumário' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Capítulo 2' }).click()
   await expect(active(page).locator('h1')).toHaveText('Travessia')
@@ -256,16 +260,28 @@ test('EPUB chapter commit keeps an outgoing presentation and reverses correctly'
   await page.keyboard.press('ArrowLeft')
   await expect(active(page).locator('h1')).toHaveText('Chegada')
   await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
-  await expect.poll(async () => (await position(page)).y).toBeGreaterThan(0)
-  const animation = await page.evaluate(() => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
-    const animation = document.getAnimations().find(item => (item.effect as KeyframeEffect)?.target instanceof HTMLElement && ((item.effect as KeyframeEffect).target as HTMLElement).classList.contains('reader-presentation'))!
-    animation.pause(); animation.currentTime = 120
-    return { duration: animation.effect!.getTiming().duration, iframeTransform: getComputedStyle(document.querySelector('.epub-stage:not(.epub-stage--preparing)')!).transform }
+  await expect.poll(() => active(page).locator('.reader-pages').evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
+  const native = await page.evaluate(() => typeof document.startViewTransition === 'function')
+  if (native) await page.evaluate(() => {
+    let count = 0
+    const hold = (event: AnimationEvent) => {
+      if (!['reader-in', 'reader-out'].includes(event.animationName)) return
+      for (const animation of document.getAnimations()) if (['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName)) { animation.pause(); animation.currentTime = 120 }
+      if (++count === 2) document.removeEventListener('animationstart', hold)
+    }
+    document.addEventListener('animationstart', hold)
   })
-  expect(animation).toEqual({ duration: 240, iframeTransform: 'none' })
-  await page.screenshot({ path: `test-results/transition-${info.project.name}.png` })
-  await page.evaluate(() => document.getAnimations().forEach(animation => animation.finish()))
+  await page.keyboard.press('ArrowLeft')
+  if (native) {
+    await expect.poll(() => page.evaluate(() => document.getAnimations().filter(animation => ['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName) && animation.playState === 'paused').length)).toBe(2)
+    const animation = await page.evaluate(() => {
+      const animations = document.getAnimations().filter(item => ['reader-in', 'reader-out'].includes((item as CSSAnimation).animationName))
+      return { duration: animations[0]!.effect!.getTiming().duration, iframeTransform: getComputedStyle(document.querySelector('.epub-stage:not(.epub-stage--preparing)')!).transform }
+    })
+    expect(animation).toEqual({ duration: 240, iframeTransform: 'none' })
+    await page.screenshot({ path: `test-results/transition-${info.project.name}.png` })
+    await page.evaluate(() => document.getAnimations().forEach(animation => animation.finish()))
+  }
 })
 
 test.describe('progress sync feedback', () => {

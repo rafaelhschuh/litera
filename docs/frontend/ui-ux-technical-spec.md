@@ -1353,3 +1353,18 @@ Uma tela não está pronta até:
 - Library Detail inclui **Enviar livros**, seleção múltipla EPUB/PDF, limite vindo da API, progresso real por arquivo, validação e catalogação separadas, cancelamento e link Jobs. Colisões, falta de escrita, tamanho e arquivo inválido têm erro acionável sem substituir fontes.
 
 - Abertura mostra spinner desde o HTML/CSS inicial. Login mostra conexão e preparação; prepara a Home e os dois primeiros livros antes de navegar, com deadline e fallback normal. Cards próximos da área visível preparam capas/detalhes gradualmente, com concorrência/cache limitados e isolamento por conta.
+
+
+## Reader and catalog follow-up (0.8.0)
+
+- EPUB scroll mode: vertical scrolling reads the current chapter; lateral swipe, arrow keys and toolbar arrows change chapter and start at its beginning. PageUp/PageDown/Space scroll within the chapter. Paginated mode keeps viewport-page navigation and returns to the last screen when crossing back to the preceding chapter.
+- TOC uses EPUB 3 navigation or EPUB 2 NCX titles/hierarchy and fragment targets, without changing spine order or locator chapter identity. Missing optional navigation falls back to spine labels. Head/title metadata is excluded from prose.
+- Reader settings and account Preferences share font, text-size, margin, line/letter/paragraph-spacing and alignment controls. Saved values work through the existing preferences API and offline outbox.
+- Phone bottom-tab transitions move horizontally in tab order. Book card/cover geometry expands into detail with progressive enhancement. Both paths respect system/saved reduced motion and preserve ordinary links.
+
+
+### Correção das transições (0.8.0)
+
+- No leitor moderno, a passagem usa a imagem renderizada pelo compositor; o EPUB não é remontado num Shadow DOM com outra quebra de linhas. Commit/fontes/layout da entrada terminam antes de ela ser capturada. Sem View Transitions, EPUB muda diretamente e PDF mantém seu fallback anterior.
+- Abertura/retorno do card e Back/Forward usam a mesma transação visual de navegação; restauração de scroll precede a captura do destino. A lista de origem e o card tocado são preservados em memória por conta.
+- A barra móvel e o cabeçalho ficam em camadas acima de conteúdo/capas durante toda a transição. Diálogos fecham com movimento inverso antes de remover o modal; redução de movimento dispensa a espera.

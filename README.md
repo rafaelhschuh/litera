@@ -2,7 +2,7 @@
 
 Litera Beta é uma biblioteca digital self-hosted para EPUB e PDF, com múltiplos acervos, jobs de scan, catálogo, metadata resiliente, reader integrado, progresso concorrente por usuário, painel administrativo e um cliente conservador em `/legacy`.
 
-**Versão atual:** `0.7.1` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.7.1`
+**Versão atual:** `0.8.0` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.8.0`
 
 ## Ambiente local com Docker Compose
 
@@ -45,7 +45,7 @@ docker compose down
 
 ## Produção com Docker Compose
 
-O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.7.1`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
+O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.8.0`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
 
 1. crie a pasta `books` ao lado do Compose e copie para ela os arquivos `.epub` e `.pdf`;
 2. troque `CHANGE_ME_BEFORE_DEPLOY` por uma senha inédita de pelo menos 12 caracteres;
@@ -73,9 +73,19 @@ docker compose -f docker-compose.production.yml pull
 docker compose -f docker-compose.production.yml up -d
 ```
 
-O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.7.1` para evitar upgrades implícitos.
+O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.8.0` para evitar upgrades implícitos.
 
 As capas extraídas, enviadas manualmente ou geradas a partir da primeira página de um PDF são armazenadas como JPEG progressivo de até 640 × 960 pixels. O catálogo carrega somente esse derivado e nunca abre o PDF para montar a capa no navegador. Um rescan preenche automaticamente capas ausentes de PDFs já catalogados, mesmo quando o arquivo fonte não mudou. Capas persistidas por versões anteriores são convertidas no primeiro acesso, sem alterar o EPUB/PDF fonte.
+
+## Leitura e navegação — 0.8.0
+
+- Sumário EPUB usa os títulos e destinos do nav/NCX original; metadados `head/title` não entram no texto do capítulo.
+- Em rolagem por capítulo, setas e swipe lateral trocam de capítulo e abrem seu início. Em páginas pela tela, avançam uma tela e mantêm o texto ao recalcular o layout.
+- Fontes locais, tamanho até 200%, alinhamento, margens laterais/superior/inferior e espaçamentos ficam nas preferências da conta e funcionam com o fluxo offline existente.
+- Transições de módulos seguem a ordem da barra móvel; cards expandem ao abrir e retornam à lista de origem ao voltar. Cabeçalho/barra permanecem acima das apresentações. Painéis também animam ao fechar.
+- EPUB prepara o próximo frame antes de capturar o swipe, sem recriar o texto em outro contexto CSS nem esperar pintura dentro de uma captura suspensa. Navegadores sem a API de transição mantêm a leitura com troca direta; PDF conserva seu fallback.
+
+Pacotes offline salvos antes da correção do conteúdo/sumário precisam ser atualizados para receber essa extração. Os arquivos EPUB fonte não são modificados. Detalhes em [ADR-0015](docs/decisions/ADR-0015-epub-navigation-typography-and-route-motion.md).
 
 ## Estabilidade do leitor — 0.7.1
 

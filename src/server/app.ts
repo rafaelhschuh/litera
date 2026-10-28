@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { preparePdf, preparedPdfDirectory, readPreparedPdfPage } from './pdf-preparation.js'
 import type { ReadingLocator } from '../shared/progress.js'
 import { normalizeProgress } from '../shared/progress.js'
+import { defaultReaderTypography, readerLineHeights, resolveReaderTypography } from '../shared/reader-typography.js'
 import { createSession, deleteSession, parseCookies, requireAdmin, requireUser, sessionMiddleware, type SessionUser } from './auth.js'
 import type { AppConfig } from './config.js'
 import { ensureOptimizedCover, InvalidCoverError, storeOptimizedCover } from './covers.js'
@@ -28,7 +29,7 @@ const librarySchema = z.object({ name: z.string().trim().min(1).max(120), path: 
 const progressSchema = z.object({ format: z.enum(['epub', 'pdf']), progressRatio: z.number(), locator: z.record(z.string(), z.unknown()), completed: z.boolean().optional(), revision: z.number().int().nonnegative().optional() })
 const userSchema = z.object({ username: z.string().trim().min(1).max(100), displayName: z.string().trim().min(1).max(120), password: z.string().min(12).max(1024), role: z.enum(['admin', 'reader']).default('reader'), libraryIds: z.array(z.number().int().positive()).default([]) })
 const userUpdateSchema = z.object({ displayName: z.string().trim().min(1).max(120).optional(), role: z.enum(['admin', 'reader']).optional(), active: z.boolean().optional(), password: z.string().min(12).max(1024).optional(), libraryIds: z.array(z.number().int().positive()).optional() })
-const preferenceSchema = z.object({ theme: z.enum(['light', 'sepia', 'dark']), fontScale: z.number().int().min(80).max(140), lineHeight: z.enum(['compact', 'normal', 'relaxed']), margins: z.enum(['narrow', 'normal', 'wide']), appTheme: z.enum(['system', 'light', 'dark']), reducedMotion: z.boolean(), pdfInvert: z.boolean().default(false), epubFlow: z.enum(['scroll', 'paginated']).optional() })
+const preferenceSchema = z.object({ theme: z.enum(['light', 'sepia', 'dark']), fontScale: z.number().int().min(80).max(200), lineHeight: z.enum(['compact', 'normal', 'relaxed']), margins: z.enum(['narrow', 'normal', 'wide']), appTheme: z.enum(['system', 'light', 'dark']), reducedMotion: z.boolean(), pdfInvert: z.boolean().default(false), epubFlow: z.enum(['scroll', 'paginated']).optional(), fontFamily: z.enum(['publisher', 'serif', 'literary', 'sans', 'mono']).optional(), marginSize: z.number().min(12).max(80).optional(), marginTop: z.number().min(0).max(160).optional(), marginBottom: z.number().min(0).max(160).optional(), lineSpacing: z.number().min(1.2).max(2.4).optional(), letterSpacing: z.number().min(0).max(.12).optional(), paragraphSpacing: z.number().min(.5).max(2).optional(), textAlign: z.enum(['publisher', 'start', 'justify']).optional() })
 const textAnchorSchema = z.object({ version: z.literal(1), scope: z.enum(['epub', 'pdf-page', 'pdf-reflow']), start: z.number().int().nonnegative(), end: z.number().int().positive(), exact: z.string().min(1).max(10000), prefix: z.string().max(48), suffix: z.string().max(48) }).refine(anchor => anchor.end - anchor.start === anchor.exact.length)
 const highlightSchema = z.object({ quoteText: z.string().trim().min(1).max(10000), locator: z.record(z.string(), z.unknown()), chapter: z.string().trim().max(500).optional(), pageNumber: z.number().int().positive().optional() })
 const ratingSchema = z.object({ rating: z.number().int().min(0).max(5) })
@@ -167,7 +168,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.7.1', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.8.0', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -274,13 +275,13 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     try {
       const file = locateBookFile(db, Number(req.params.id), req.user!); if (!file || file.format !== 'epub') { apiError(res, 404, 'EPUB_NOT_FOUND', 'EPUB is unavailable'); return }
       const info = await extractEpub(file.filePath)
-      res.json({ title: info.title, chapters: info.chapters })
+      res.json({ title: info.title, chapters: info.chapters, navigation: info.navigation })
     } catch (error) { next(error) }
   })
   app.get('/api/v1/books/:id/epub/chapter', requireUser, async (req, res, next) => {
     try {
       const href = typeof req.query.href === 'string' ? req.query.href : ''
-      const scale = Math.min(140, Math.max(80, Number(req.query.scale) || 100))
+      const scale = Math.min(200, Math.max(80, Number(req.query.scale) || 100))
       const theme = ['light', 'sepia', 'dark'].includes(String(req.query.theme)) ? String(req.query.theme) : 'light'
       const lineHeight = ({ compact: 1.45, normal: 1.65, relaxed: 1.85 } as Record<string, number>)[String(req.query.lineHeight)] ?? 1.65
       const measure = ({ narrow: 42, normal: 56, wide: 72 } as Record<string, number>)[String(req.query.margins)] ?? 56
@@ -467,14 +468,15 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
   })
 
   app.get('/api/v1/settings', requireUser, (req, res) => {
-    const row = db.prepare(`SELECT theme,font_scale AS fontScale,line_height AS lineHeight,margins,app_theme AS appTheme,reduced_motion AS reducedMotion,pdf_invert AS pdfInvert,epub_flow AS epubFlow FROM reader_preferences WHERE user_id=?`).get(req.user!.id) as any
-    res.json({ preferences: row ? { ...row, reducedMotion: Boolean(row.reducedMotion), pdfInvert: Boolean(row.pdfInvert) } : { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll' } })
+    const row = db.prepare(`SELECT theme,font_scale AS fontScale,line_height AS lineHeight,margins,app_theme AS appTheme,reduced_motion AS reducedMotion,pdf_invert AS pdfInvert,epub_flow AS epubFlow,font_family AS fontFamily,margin_size AS marginSize,margin_top AS marginTop,margin_bottom AS marginBottom,line_spacing AS lineSpacing,letter_spacing AS letterSpacing,paragraph_spacing AS paragraphSpacing,text_align AS textAlign FROM reader_preferences WHERE user_id=?`).get(req.user!.id) as any
+    res.json({ preferences: row ? { ...row, ...resolveReaderTypography(row), reducedMotion: Boolean(row.reducedMotion), pdfInvert: Boolean(row.pdfInvert) } : { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll', ...defaultReaderTypography } })
   })
   app.put('/api/v1/settings', requireUser, mutation(req => {
     const input = preferenceSchema.safeParse(req.body); if (!input.success) return rejected(400, 'INVALID_PREFERENCES', 'Reading preferences are invalid')
-    const previous = db.prepare('SELECT epub_flow AS epubFlow FROM reader_preferences WHERE user_id=?').get(req.user!.id) as { epubFlow: string } | undefined
-    const value = { ...input.data, epubFlow: input.data.epubFlow ?? previous?.epubFlow ?? 'scroll' }
-    db.prepare(`INSERT INTO reader_preferences(user_id,theme,font_scale,line_height,margins,app_theme,reduced_motion,pdf_invert,epub_flow) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET theme=excluded.theme,font_scale=excluded.font_scale,line_height=excluded.line_height,margins=excluded.margins,app_theme=excluded.app_theme,reduced_motion=excluded.reduced_motion,pdf_invert=excluded.pdf_invert,epub_flow=excluded.epub_flow,updated_at=CURRENT_TIMESTAMP`).run(req.user!.id, value.theme, value.fontScale, value.lineHeight, value.margins, value.appTheme, value.reducedMotion ? 1 : 0, value.pdfInvert ? 1 : 0, value.epubFlow)
+    const previous = db.prepare('SELECT epub_flow AS epubFlow,line_height AS lineHeight,font_family AS fontFamily,margin_size AS marginSize,margin_top AS marginTop,margin_bottom AS marginBottom,line_spacing AS lineSpacing,letter_spacing AS letterSpacing,paragraph_spacing AS paragraphSpacing,text_align AS textAlign FROM reader_preferences WHERE user_id=?').get(req.user!.id) as any
+    const typography = resolveReaderTypography({ ...previous, ...input.data, ...(input.data.lineSpacing === undefined && previous?.lineHeight !== input.data.lineHeight ? { lineSpacing: readerLineHeights[input.data.lineHeight] } : {}) })
+    const value = { ...input.data, ...typography, epubFlow: input.data.epubFlow ?? previous?.epubFlow ?? 'scroll' }
+    db.prepare(`INSERT INTO reader_preferences(user_id,theme,font_scale,line_height,margins,app_theme,reduced_motion,pdf_invert,epub_flow,font_family,margin_size,margin_top,margin_bottom,line_spacing,letter_spacing,paragraph_spacing,text_align) VALUES (@userId,@theme,@fontScale,@lineHeight,@margins,@appTheme,@reducedMotion,@pdfInvert,@epubFlow,@fontFamily,@marginSize,@marginTop,@marginBottom,@lineSpacing,@letterSpacing,@paragraphSpacing,@textAlign) ON CONFLICT(user_id) DO UPDATE SET theme=excluded.theme,font_scale=excluded.font_scale,line_height=excluded.line_height,margins=excluded.margins,app_theme=excluded.app_theme,reduced_motion=excluded.reduced_motion,pdf_invert=excluded.pdf_invert,epub_flow=excluded.epub_flow,font_family=excluded.font_family,margin_size=excluded.margin_size,margin_top=excluded.margin_top,margin_bottom=excluded.margin_bottom,line_spacing=excluded.line_spacing,letter_spacing=excluded.letter_spacing,paragraph_spacing=excluded.paragraph_spacing,text_align=excluded.text_align,updated_at=CURRENT_TIMESTAMP`).run({ userId: req.user!.id, ...value, reducedMotion: value.reducedMotion ? 1 : 0, pdfInvert: value.pdfInvert ? 1 : 0 })
     return { status: 200, body: { preferences: value } }
   }))
   app.put('/api/v1/account/password', requireUser, (req, res) => {
@@ -674,7 +676,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.7.1', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.8.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

@@ -82,19 +82,29 @@ test.describe('mobile navigation and reader preparation', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel', exact: true }).click()
     await ready(page)
     for (const key of ['ArrowRight', 'ArrowLeft']) {
-      const result = await page.evaluate(key => {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
-        const animations = document.getAnimations().filter(animation => ((animation.effect as KeyframeEffect)?.target as HTMLElement)?.classList?.contains('reader-presentation'))
-        for (const animation of animations) { animation.pause(); animation.currentTime = 120 }
-        return { durations: animations.map(animation => animation.effect!.getTiming().duration), frames: animations.map(animation => (animation.effect as KeyframeEffect).getKeyframes()), live: getComputedStyle(document.querySelector('.epub-stage:not(.epub-stage--preparing)')!).transform, width: document.querySelector('.reader-stage')!.scrollWidth }
-      }, key)
-      expect(result.frames).toHaveLength(2)
-      expect(result.durations).toEqual([240, 240])
-      expect(result.live).toBe('none')
-      expect(result.width).toBe(390)
-      for (const frames of result.frames) expect(frames.every(frame => frame.opacity === undefined || frame.opacity === '1')).toBe(true)
-      expect(result.frames[0]![1]!.transform).toMatch(key === 'ArrowRight' ? /translateX\(-390px\)/ : /translateX\(390px\)/)
-      await page.evaluate(() => document.getAnimations().forEach(animation => animation.finish()))
+      const native = await page.evaluate(() => typeof document.startViewTransition === 'function')
+      if (native) await page.evaluate(() => {
+        let count = 0
+        const hold = (event: AnimationEvent) => {
+          if (!['reader-in', 'reader-out'].includes(event.animationName)) return
+          for (const animation of document.getAnimations()) if (['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName)) { animation.pause(); animation.currentTime = 120 }
+          if (++count === 2) document.removeEventListener('animationstart', hold)
+        }
+        document.addEventListener('animationstart', hold)
+      })
+      await page.keyboard.press(key)
+      if (native) {
+        await expect.poll(() => page.evaluate(() => document.getAnimations().filter(animation => ['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName) && animation.playState === 'paused').length)).toBe(2)
+        const result = await page.evaluate(() => {
+          const animations = document.getAnimations().filter(animation => ['reader-in', 'reader-out'].includes((animation as CSSAnimation).animationName))
+          return { durations: animations.map(animation => animation.effect!.getTiming().duration), names: animations.map(animation => (animation as CSSAnimation).animationName).sort(), frames: animations.map(animation => (animation.effect as KeyframeEffect).getKeyframes()), direction: document.documentElement.style.getPropertyValue('--reader-direction'), live: getComputedStyle(document.querySelector('.epub-stage:not(.epub-stage--preparing)')!).transform, width: document.querySelector('.reader-stage')!.scrollWidth }
+        })
+        expect(result.names).toEqual(['reader-in', 'reader-out'])
+        expect(result.durations).toEqual([240, 240]); expect(result.live).toBe('none'); expect(result.width).toBe(390)
+        expect(result.direction).toBe(key === 'ArrowRight' ? '1' : '-1')
+        for (const frames of result.frames) expect(frames.every(frame => frame.opacity === undefined || frame.opacity === '1')).toBe(true)
+        await page.evaluate(() => document.getAnimations().forEach(animation => animation.finish()))
+      }
     }
     await active(page).locator('.reader-document').evaluate(el => {
       const doc = el.ownerDocument, target = el.querySelector('p')!
@@ -162,7 +172,7 @@ test.describe('mobile navigation and reader preparation', () => {
     await page.request.put(`/api/v1/books/${epub.id}/progress`, { data: { format: 'epub', progressRatio: 0, locator: { type: 'epub-cfi', cfi: 'epubcfi(/6/2!/4/2)', chapterHref: 'chapter-1.xhtml', elementIndex: 0, offset: 0 } } })
     await page.goto(`/read/${epub.id}`)
     await ready(page)
-    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('PageDown')
     await expect.poll(() => active(page).locator('body').evaluate(el => el.ownerDocument.defaultView!.scrollY)).toBeGreaterThan(0)
     await expect(page.locator('.reader-presentation')).toHaveCount(0)
     await page.request.put(`/api/v1/books/${pdf.id}/progress`, { data: { format: 'pdf', progressRatio: 0, locator: { type: 'pdf-reflow', page: 1 } } })

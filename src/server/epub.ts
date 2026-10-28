@@ -7,6 +7,7 @@ import yauzl from 'yauzl'
 
 type ZipEntry = { fileName: string; uncompressedSize: number }
 type ManifestItem = { id: string; href: string; mediaType: string; properties?: string }
+export type EpubNavigationItem = { id: string; label: string; depth: number; href?: string; chapterHref?: string }
 export type EpubInfo = {
   title: string
   author?: string
@@ -17,10 +18,92 @@ export type EpubInfo = {
   seriesIndex?: number
   cover?: { data: Buffer; extension: string }
   chapters: Array<{ id: string; href: string; label: string }>
+  navigation: EpubNavigationItem[]
   opfDirectory: string
 }
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '', removeNSPrefix: true, parseTagValue: false, trimValues: true })
+const navigationParser = new XMLParser({ preserveOrder: true, ignoreAttributes: false, attributeNamePrefix: '', removeNSPrefix: true, parseTagValue: false, trimValues: false, htmlEntities: true })
+type NavigationNode = Record<string, any>
+
+function navigationNodes(nodes: NavigationNode[], tag: string, depth = 0): NavigationNode[] {
+  if (depth > 32) return []
+  return nodes.flatMap(node => node[tag] ? [node] : Object.entries(node).flatMap(([key, value]) => key !== ':@' && Array.isArray(value) ? navigationNodes(value, tag, depth + 1) : []))
+}
+
+function navigationText(nodes: NavigationNode[], depth = 0): string {
+  if (depth > 32) return ''
+  return nodes.map(node => Object.entries(node).map(([key, value]) => key === '#text' ? String(value) : key !== ':@' && Array.isArray(value) ? navigationText(value, depth + 1) : '').join('')).join('')
+}
+
+/** Navigation is optional metadata. It must not change spine identity/order or
+ * make a readable local book fail when an authoring tool emitted a broken TOC. */
+async function extractNavigation(filePath: string, manifest: ManifestItem[], spine: ManifestItem[], opfDirectory: string, ncxId?: string): Promise<EpubNavigationItem[]> {
+  const chaptersByPath = new Map<string, ManifestItem>()
+  for (const item of spine) { try { chaptersByPath.set(resourcePath(opfDirectory, item.href), item) } catch { /* Existing chapter validation remains authoritative. */ } }
+  const target = (navigationPath: string, raw: unknown): { href: string; chapterHref: string } | undefined => {
+    if (typeof raw !== 'string' || !raw.trim() || hasControlCharacters(raw)) return
+    const href = raw.trim(), hash = href.indexOf('#'), source = hash < 0 ? href : href.slice(0, hash), fragment = hash < 0 ? '' : href.slice(hash)
+    try {
+      const resolved = source ? resourcePath(path.posix.dirname(navigationPath), source) : navigationPath
+      const chapter = chaptersByPath.get(resolved)
+      if (chapter) return { href: chapter.href + fragment, chapterHref: chapter.href }
+    } catch { /* External URLs, traversal and non-spine resources are not reader destinations. */ }
+  }
+  const candidates = manifest.filter(item => item.properties?.split(/\s+/).includes('nav')).slice(0, 4)
+  const declaredNcx = manifest.find(item => item.id === ncxId)
+  const ncxCandidates = [...(declaredNcx ? [declaredNcx] : []), ...manifest.filter(item => item.mediaType === 'application/x-dtbncx+xml')]
+    .filter((item, index, items) => items.indexOf(item) === index).slice(0, 4)
+  for (const { item, ncx } of [...candidates.map(item => ({ item, ncx: false })), ...ncxCandidates.map(item => ({ item, ncx: true }))]) {
+    try {
+      const navigationPath = resourcePath(opfDirectory, item.href)
+      const nodes = navigationParser.parse((await readArchiveEntry(filePath, navigationPath, 1024 * 1024)).toString('utf8')) as NavigationNode[]
+      const entries: EpubNavigationItem[] = []
+      const append = (label: string, depth: number, destination?: ReturnType<typeof target>) => {
+        label = label.replace(/\s+/g, ' ').trim().slice(0, 512)
+        if (label && entries.length < 2048) entries.push({ id: `toc-${entries.length + 1}`, label, depth, ...destination })
+      }
+      if (ncx) {
+        const map = navigationNodes(nodes, 'navMap')[0]?.navMap ?? []
+        const visit = (points: NavigationNode[], depth: number) => {
+          if (depth > 16 || entries.length >= 2048) return
+          for (const point of points) {
+            if (!point.navPoint) continue
+            const children = point.navPoint as NavigationNode[]
+            const label = navigationNodes(children.filter(child => !child.navPoint), 'navLabel')[0]?.navLabel ?? []
+            const source = children.find(child => child.content)?.[':@']?.src
+            const destination = target(navigationPath, source)
+            if (destination || children.some(child => child.navPoint)) append(navigationText(label), depth, destination)
+            visit(children, depth + 1)
+          }
+        }
+        visit(map, 0)
+      } else {
+        const navs = navigationNodes(nodes, 'nav')
+        const toc = navs.find(node => String(node[':@']?.type ?? '').split(/\s+/).includes('toc') || node[':@']?.role === 'doc-toc')
+          ?? (navs.length === 1 && !navs[0]?.[':@']?.type ? navs[0] : undefined)
+        const visit = (lists: NavigationNode[], depth: number) => {
+          if (depth > 16 || entries.length >= 2048) return
+          for (const list of lists) for (const child of (list.ol ?? list.ul ?? []) as NavigationNode[]) {
+            if (!child.li) continue
+            const children = child.li as NavigationNode[], nested = children.filter(node => node.ol || node.ul), content = children.filter(node => !node.ol && !node.ul)
+            const link = navigationNodes(content, 'a')[0], labelNode = link ?? navigationNodes(content, 'span')[0]
+            const label = navigationText(labelNode ? labelNode.a ?? labelNode.span : content)
+            const destination = target(navigationPath, link?.[':@']?.href)
+            if (destination || nested.length) append(label, depth, destination)
+            visit(nested, depth + 1)
+          }
+        }
+        if (toc) {
+          const lists = navigationNodes(toc.nav, 'ol')
+          visit((lists.length ? lists : navigationNodes(toc.nav, 'ul')).slice(0, 1), 0)
+        }
+      }
+      if (entries.some(entry => entry.chapterHref)) return entries
+    } catch { /* Missing/malformed optional navigation falls back to NCX or spine labels. */ }
+  }
+  return []
+}
 
 function arrayOf<T>(value: T | T[] | undefined): T[] { return value === undefined ? [] : Array.isArray(value) ? value : [value] }
 function textOf(value: unknown): string | undefined {
@@ -98,10 +181,14 @@ export async function extractEpub(filePath: string): Promise<EpubInfo> {
       // lazy reader avoids continuing from the package entry and missing it.
       if (!entryPath.startsWith('../')) cover = { data: await readArchiveEntry(filePath, entryPath, 12 * 1024 * 1024), extension: path.extname(coverItem.href) || '.jpg' }
     }
+    const opfDirectory = path.posix.dirname(opfPath)
+    const navigation = await extractNavigation(filePath, manifest, spine, opfDirectory, opf.spine?.toc)
+    const labels = new Map<string, string>()
+    for (const item of navigation) if (item.chapterHref && !labels.has(item.chapterHref)) labels.set(item.chapterHref, item.label)
     return {
       title, author, identifier, language, genres, series: typeof series === 'string' ? series : undefined, seriesIndex: Number.isFinite(seriesIndexValue) ? seriesIndexValue : undefined, cover,
-      chapters: spine.map((item, index) => ({ id: item.id, href: item.href, label: `Capítulo ${index + 1}` })),
-      opfDirectory: path.posix.dirname(opfPath),
+      chapters: spine.map((item, index) => ({ id: item.id, href: item.href, label: labels.get(item.href) ?? `Capítulo ${index + 1}` })),
+      navigation, opfDirectory,
     }
   } finally { zip.close() }
 }
@@ -295,6 +382,9 @@ export async function readEpubChapter(filePath: string, href: string, bookId?: s
     const content = sanitizeHtml(html, {
       allowedTags: sanitizeHtml.defaults.allowedTags.concat(['section', 'article', 'figure', 'figcaption', 'img', 'svg', 'path']),
       allowedAttributes: { '*': ['id', 'class', 'title', 'lang', 'dir', 'style'], a: ['href', 'target', 'rel', 'data-epub-href'], img: ['src', 'alt', 'width', 'height'], svg: ['viewBox'], path: ['d'] },
+      // Disallowed wrappers normally retain their text. The complete head/title
+      // is metadata, never chapter prose; CSS was collected separately above.
+      nonTextTags: ['head', 'title', 'script', 'style', 'textarea', 'option', 'xmp', 'noscript'],
       parseStyleAttributes: false,
       allowedSchemes: ['http', 'https'],
       allowProtocolRelative: false,

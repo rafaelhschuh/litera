@@ -12,6 +12,7 @@ import UiIcon from '../components/UiIcon.vue'
 import RatingStars from '../components/RatingStars.vue'
 import { api } from '../lib/api'
 import { syncState } from '../lib/offline-sync'
+import { bookReturnLabel, bookReturnPath } from '../lib/navigation-motion'
 
 const route = useRoute()
 // A cached detail must stay bound to its own book when the active route changes.
@@ -34,8 +35,8 @@ async function rateHighlight(highlight:any,rating:number){await change(async()=>
 <template>
   <AppState v-if="state==='loading'" kind="loading" />
   <AppState v-else-if="state==='error'" kind="error" title="Livro indisponível" :message="!syncState.online ? 'Este livro não está disponível offline. Conecte-se para abri-lo e salvar um download.' : 'Ele pode ter sido removido do acervo ou não estar liberado para sua conta.'"><button class="text-link" @click="load">Tentar novamente</button></AppState>
-  <article v-else class="book-detail" :aria-busy="refreshing">
-    <RouterLink class="back-link" to="/library">← Biblioteca</RouterLink>
+  <article v-else class="book-detail" :data-book-detail="id" :aria-busy="refreshing">
+    <RouterLink class="back-link" :to="bookReturnPath(id)">← {{ bookReturnLabel(id) }}</RouterLink>
     <BookCover :id="book.id" :title="book.title" :author="book.author" :has-cover="book.hasCover" :cover-revision="book.coverRevision" :format="book.format" />
     <div class="book-detail__copy">
       <PageRefresh :busy="refreshing" :error="loadError" @retry="load" />

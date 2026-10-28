@@ -95,7 +95,7 @@ export class BookSource {
     return value
   }
 
-  async manifest(): Promise<{ chapters: Chapter[] }> {
+  async manifest(): Promise<{ chapters: Chapter[]; navigation?: import('../../shared/epub-document').EpubNavigationItem[] }> {
     return this.json(`/api/v1/books/${this.bookId}/epub/manifest`)
   }
 

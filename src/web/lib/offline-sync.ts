@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { normalizeProgress, type ReadingLocator } from '../../shared/progress'
+import { defaultReaderTypography, resolveReaderTypography } from '../../shared/reader-typography'
 import { getOfflineUser, offlineContext } from './offline-context'
 import { getOfflineBook, getOfflineResource, listOfflineBooks } from './offline-store'
 import { clearOfflineProgressUser, readOfflineProgress } from './offline-progress'
@@ -29,7 +30,7 @@ let running: Promise<void> | undefined
 let cleanup: (() => void) | undefined
 let probeFailures = 0
 const controllers = new Set<AbortController>()
-const defaultPreferences = { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll' }
+const defaultPreferences = { theme: 'light', fontScale: 100, lineHeight: 'normal', margins: 'normal', appTheme: 'system', reducedMotion: false, pdfInvert: false, epubFlow: 'scroll', ...defaultReaderTypography }
 function operationId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
@@ -158,7 +159,7 @@ async function snapshot(ctx: Context, key: string): Promise<any | undefined> {
   } else if (key === '/api/v1/settings') {
     for (const book of await listOfflineBooks(ctx.userId)) {
       const resource = await getOfflineResource(ctx.userId, book.bookId, key)
-      if (resource) { const saved = JSON.parse(await resource.text()); return { preferences: { ...defaultPreferences, ...saved.preferences } } }
+      if (resource) { const saved = JSON.parse(await resource.text()); return { preferences: { ...defaultPreferences, ...saved.preferences, ...resolveReaderTypography(saved.preferences ?? {}) } } }
     }
     return { preferences: { ...defaultPreferences } }
   }
@@ -175,7 +176,7 @@ async function cacheRead(ctx: Context, key: string, body: any): Promise<any> {
   return transaction('readwrite', async tx => {
     const [stored, pending] = await Promise.all([request<State | undefined>(tx.state.get([ctx.userId, key])), operations(tx, ctx.userId)])
     if (stored && (stored.conflict || pending.some(op => op.key === key))) return stored.value
-    if (key === '/api/v1/settings') body = { preferences: { ...defaultPreferences, ...body.preferences } }
+    if (key === '/api/v1/settings') body = { preferences: { ...defaultPreferences, ...body.preferences, ...resolveReaderTypography(body.preferences ?? {}) } }
     if (/^\/api\/v1\/books\/\d+$/.test(key) && !pending.some(op => op.key === `${key}/favorite`)) putState(tx, ctx, `${key}/favorite`, { favorite: Boolean(body.book.favorite) })
     putState(tx, ctx, key, body)
     return body
@@ -216,6 +217,7 @@ async function localCatalog(ctx: Context, url: URL): Promise<any> {
   return { offline: true, books: filtered.slice((page - 1) * pageSize, page * pageSize), query, pagination: { page, pageSize, total: filtered.length, pages: Math.max(1, Math.ceil(filtered.length / pageSize)) } }
 }
 async function overlayResponse(ctx: Context, body: any, offline: boolean): Promise<any> {
+  if (body?.preferences) return { preferences: { ...defaultPreferences, ...body.preferences, ...resolveReaderTypography(body.preferences) } }
   if (!body?.book && !body?.books && !body?.continueReading) return body
   const [stored, pending] = await transaction('readonly', tx => Promise.all([states(tx, ctx.userId), operations(tx, ctx.userId)]), ctx)
   const downloads = new Set((await listOfflineBooks(ctx.userId)).map(book => book.bookId))

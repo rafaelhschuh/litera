@@ -150,7 +150,7 @@ html{scrollbar-gutter:stable}
 .backdrop-enter-from,.backdrop-leave-to{opacity:0}
 .dialog[open]{animation:panel-enter var(--motion-normal) var(--ease-standard)}
 .dialog[open]::backdrop{animation:backdrop-enter var(--motion-normal)}
-@keyframes panel-enter{from{opacity:0;transform:translateY(var(--space-3))}to{opacity:1;transform:none}}
+@keyframes panel-enter{from{opacity:0;transform:translateY(var(--space-3)) scale(.98)}to{opacity:1;transform:none}}
 @keyframes backdrop-enter{from{opacity:0}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.page-enter-from{opacity:1;transform:none}.book-cover img{opacity:1}}
 :root[data-reduced-motion="true"] .page-enter-from{opacity:1;transform:none}
@@ -211,3 +211,52 @@ html[data-reader-theme]{scrollbar-gutter:auto}
 }
 .reader-transition{position:absolute;z-index:2;overflow:hidden;pointer-events:none;contain:paint}
 .reader-stage--pdf-fitted{touch-action:pan-y}
+
+/* Reading typography and directional, solid-surface navigation. */
+.reader-typography{display:grid;gap:var(--space-4)}
+.reader-range{display:flex;align-items:center;gap:var(--space-3)}
+.reader-range input[type=range],.reader-settings input[type=range]{min-width:0;min-height:var(--space-7);padding:0;border:0;background:transparent;accent-color:var(--accent)}
+.reader-range output{flex:0 0 5rem;text-align:end;font-size:var(--text-sm);font-variant-numeric:tabular-nums;color:var(--text-secondary)}
+.reader-typography__preview{margin:0;padding:var(--space-4);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text-primary);background:var(--surface-secondary)}
+.reader-stage--reflow .reader-document{padding-inline:var(--reader-margin,24px);padding-top:var(--reader-margin-top,80px);padding-bottom:var(--reader-margin-bottom,96px)}
+.reader-stage--reflow .reader-document p{margin-block-end:var(--reader-paragraph-space,1em)}
+.reader-stage--reflow .reader-document[data-text-align=start]>[data-reflow-block]{text-align:start}
+.reader-stage--reflow .reader-document[data-text-align=justify]>[data-reflow-block]{text-align:justify}
+.module-next-enter-active,.module-prev-enter-active{transition:transform var(--motion-slow) var(--ease-standard);will-change:transform}
+.module-next-enter-from{transform:translateX(100%)}.module-prev-enter-from{transform:translateX(-100%)}
+.module-next-leave-active,.module-prev-leave-active,.route-instant-leave-active{display:none}
+:root[data-route-motion=slide] .app-shell>.page,:root[data-route-motion=slide] .admin-shell>main{view-transition-name:module-content}
+::view-transition{pointer-events:none}
+::view-transition-group(module-content),::view-transition-group(book-surface),::view-transition-group(book-cover){animation-duration:var(--motion-slow);animation-timing-function:var(--ease-standard)}
+:root[data-route-motion=slide]::view-transition-old(module-content){animation:module-out var(--motion-slow) var(--ease-standard) both;mix-blend-mode:normal}
+:root[data-route-motion=slide]::view-transition-new(module-content){animation:module-in var(--motion-slow) var(--ease-standard) both;mix-blend-mode:normal}
+@keyframes module-in{from{transform:translateX(calc(var(--module-direction)*100%))}to{transform:translateX(0)}}
+@keyframes module-out{from{transform:translateX(0)}to{transform:translateX(calc(var(--module-direction)*-100%))}}
+@media(prefers-reduced-motion:reduce){.module-next-enter-from,.module-prev-enter-from{transform:none}::view-transition-group(*){animation-duration:.01ms!important}}
+:root[data-reduced-motion=true] .module-next-enter-from,:root[data-reduced-motion=true] .module-prev-enter-from{transform:none}
+
+/* Snapshot chrome remains above animated catalog content, in both directions. */
+::view-transition-group(module-content),::view-transition-group(book-surface){z-index:1}
+::view-transition-group(book-cover){z-index:2}
+::view-transition-group(app-header){z-index:3}
+::view-transition-group(app-navigation){z-index:4}
+::view-transition-group(app-header),::view-transition-group(app-navigation){animation:none}
+::view-transition-old(app-header),::view-transition-old(app-navigation){display:none}
+::view-transition-new(app-header),::view-transition-new(app-navigation){animation:none;mix-blend-mode:normal}
+::view-transition-group(book-surface){overflow:clip;border-radius:var(--radius-lg);background:var(--bg)}
+::view-transition-old(book-surface),::view-transition-new(book-surface){width:100%;height:100%;object-fit:none;object-position:top left}
+.book-motion-overlay{position:fixed;inset:0;z-index:22;pointer-events:none;overflow:hidden}
+.book-motion-overlay__panel,.book-motion-overlay__cover{position:absolute;margin:0;transform:none!important}
+.book-motion-overlay__panel{border-radius:var(--radius-lg);background:var(--bg);box-shadow:var(--shadow-sm)}
+.dialog[data-closing=true]::backdrop{animation:backdrop-exit var(--motion-normal) var(--ease-standard) both}
+@keyframes backdrop-exit{from{opacity:1}to{opacity:0}}
+
+/* Reader images come from the compositor, never a reflowed copy of the EPUB. */
+::view-transition-group(reader-page){z-index:1;animation:none}
+::view-transition-old(reader-page){animation:reader-out var(--motion-slow) var(--ease-standard) both;mix-blend-mode:normal}
+::view-transition-new(reader-page){animation:reader-in var(--motion-slow) var(--ease-standard) both;mix-blend-mode:normal}
+::view-transition-group(reader-chrome){z-index:3;animation:none}
+::view-transition-old(reader-chrome){display:none}
+::view-transition-new(reader-chrome){animation:none;mix-blend-mode:normal}
+@keyframes reader-out{from{transform:translateX(0)}to{transform:translateX(calc(var(--reader-direction)*-100%))}}
+@keyframes reader-in{from{transform:translateX(calc(var(--reader-direction)*100%))}to{transform:translateX(0)}}

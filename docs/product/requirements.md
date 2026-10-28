@@ -50,8 +50,10 @@ Litera must provide its own integrated reader experience rather than delegating 
 - EPUB and PDF can be read in-browser.
 - Reader controls include navigation, table of contents where available, typography/layout controls appropriate to the format, and search where technically supported.
 - Reader remains usable on touch devices and desktop keyboard/mouse input.
-- Modern EPUB readers can choose chapter scrolling or viewport-sized pages; the preference persists online/offline and each chapter opens at its beginning when advancing (or at its end when returning from the following chapter).
-- Viewport pages show chapter/page position and preserve the same passage through changes in size, type and reading mode; they do not become absolute EPUB page numbers.
+- Modern EPUB readers can choose chapter scrolling or viewport-sized pages; the preference persists online/offline. In chapter scrolling, lateral swipe/arrows change the spine chapter and open it at its beginning; vertical scroll and PageUp/PageDown stay within the chapter. In viewport pagination, lateral navigation advances one screen and returning across a chapter boundary opens the preceding chapter at its end.
+- Viewport pages show chapter/page position and preserve the same passage through changes in size, type and reading mode; they do not become absolute EPUB page numbers. Disposable transition surfaces preserve their column offset before their first visible frame.
+- EPUB navigation uses author-supplied EPUB 3 TOC/EPUB 2 NCX labels, hierarchy and fragments, with spine labels as fallback. Document head/title metadata must not leak into chapter prose.
+- Modern text reading offers persisted font choice, 80–200% text size, independent lateral/top/bottom margins, line/letter/paragraph spacing, alignment and text measure, using the same settings online/offline. Encoded PDF font assets retain character fidelity.
 - New highlights identify the actual selected text range, including repeated words within one paragraph, reversed selections and inline formatting. Missing/ambiguous old anchors must not silently choose the first occurrence.
 
 
@@ -145,3 +147,6 @@ Book files are treated as untrusted input. Parsing, metadata extraction, image p
 - OS/app reduced motion and unavailable animation APIs preserve direct navigation. Live EPUB frames and their locators are never transformed.
 - Adjacent content/resources are optionally prepared in bounded memory, with scale/appearance/context-aware reuse, cleanup on exit/invalidation and normal-load fallback. EPUB/PDF locators, exact highlights, authorization and offline package edition remain authoritative. Preparation does not create offline downloads or advance progress.
 - `/legacy` keeps existing conservative navigation and reading behavior.
+
+### Directional catalog motion
+- Phone bottom navigation slides horizontally according to the relative position of the selected modules. Book-card activation expands the clicked card/cover into its detail where supported. Optional presentation APIs and reduced motion must never prevent ordinary link navigation.

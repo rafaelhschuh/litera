@@ -114,3 +114,23 @@ Book cards optionally prepare covers and complete detail/highlight snapshots whe
 Phones below 640px use a solid floating bottom navigation bar, with Favorites, Library, Home, Search and More in that order. Desktop keeps the sidebar and tablets keep the existing drawer. The shared selection uses the accent/contrast tokens, `radius-pill`, `motion-slow` and the standard easing; its position moves between equal-width touch targets. The bar uses `surface-elevated`, existing border/shadow/spacing tokens and safe-area insets, without blur or transparency. Content and notices reserve space above it. It is absent from the fullscreen reader. More extends `UiDialog` with a bottom sheet variant, existing modal focus/Escape semantics and a `space-6` slide using `motion-slow`. Secondary destinations retain More selection; administration is only shown to administrators.
 
 Reader turns slide two disposable opaque surfaces across one viewport, with `motion-slow` and standard easing; neither the live EPUB iframe nor its pagination is transformed. Forward moves left, backward moves right. OS and saved reduced motion skip snapshots/animation. This applies to EPUB screen/chapter turns and both PDF modes. Navigation and semantic progress require no animation APIs. Adjacent preparation is bounded and optional; failures fall back to normal loading.
+
+
+## Reader and catalog motion follow-up
+
+Phone bottom-tab activation overrides the generic vertical screen entry with a horizontal slide based on Favorites → Library → Home → Search → More. A supported same-document View Transition snapshots only main content; the bottom selection remains live. Without that API, the incoming main content uses a transform-only Vue transition. Book cards optionally share surface/cover geometry with their detail; Web Animations provides a bounded transform fallback. Existing duration/easing tokens and reduced-motion settings govern all paths. Ordinary modified links retain browser behavior.
+
+`ReaderTypographyFields` reuses `UiField` and native selects/ranges in Reader Settings and Preferences. Font choices use local font stacks (including the book's own family); numeric margins and type/spacing ranges are reader preferences, not additions to the UI token scale. Font size is 80–200%; margins 12–80px, line height 1.2–2.4, letter spacing 0–0.12em and paragraph spacing 0.5–2em. Existing measure presets bound long desktop lines. EPUB text preferences are applied before restoring the semantic position and cached preparations include the complete appearance. PDF adapted content retains encoded font assets where necessary.
+
+
+### Revisão de continuidade bidirecional
+
+O router é responsável por iniciar/concluir as transições de catálogo, inclusive histórico. Detalhes retornam à origem do card, com contração da superfície/capa. Header e navegação inferior têm camadas próprias acima das capturas móveis; a expansão de fallback fica abaixo da barra fixa. Diálogos usam movimento inverso ao fechar e preservam o top layer/foco até terminar. A saída interrompida parte de sua transformação atual.
+
+A estratégia de cópias EPUB descrita anteriormente foi substituída: View Transitions captura a saída visual real do frame e da página pronta, sem remontar texto em outro contexto CSS. As imagens deslizam em sentidos opostos, sem fade; controles do leitor ficam em camada separada. Ausência/falha da API mantém EPUB legível com troca direta, e PDF conserva seu fallback anterior. Timings/curvas continuam os tokens existentes; movimento reduzido cancela as apresentações opcionais.
+
+
+Callbacks de View Transitions não aguardam rAF nem tarefas que dependam dele. Preparação EPUB acontece no frame oculto antes da captura; somente a troca pronta/scroll e um `nextTick` entram no callback. O router libera sua captura depois de restaurar scroll sincronamente, sem aguardar pintura. Preparações PDF com trabalho assíncrono continuam fora de callbacks que suspendem desenho.
+
+
+Text reading also offers independent top/bottom margins, each 0–160px (4px range steps), defaulting to 80/96px to match the preceding reader spacing. These are persisted reader preferences shared by EPUB scrolling, viewport pages and adapted PDF. Paginated EPUB bounds effective padding on short viewports to retain at least a readable content area; images use that same remaining height. Reflow/PDF original source assets remain unchanged.

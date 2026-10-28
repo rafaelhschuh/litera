@@ -202,7 +202,7 @@ describe('EPUB offline appearance and resources', () => {
   it('applies the existing reader presets without depending on saved CSS values', () => {
     const css = epubAppearanceCss({ theme: 'sepia', fontScale: 110, lineHeight: 'relaxed', margins: 'wide' })
     expect(css).toContain('#f4ead6'); expect(css).toContain('19.8px'); expect(css).toContain('line-height:1.85'); expect(css).toContain('72rem')
-    expect(epubAppearanceCss({ theme: 'dark', fontScale: Infinity, lineHeight: 'normal', margins: 'normal' })).toContain('25.2px')
+    expect(epubAppearanceCss({ theme: 'dark', fontScale: Infinity, lineHeight: 'normal', margins: 'normal' })).toContain('36px')
   })
 
   it('rewrites image, import and embedded-font CSS URLs without losing declarations', async () => {

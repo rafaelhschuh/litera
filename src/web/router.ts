@@ -3,17 +3,20 @@ import { nextTick, watch } from 'vue'
 import { auth } from './lib/auth'
 import AppShell from './shells/AppShell.vue'
 import AdminShell from './shells/AdminShell.vue'
+import { beginNavigationMotion, clearNavigationMotion, finishNavigationMotion } from './lib/navigation-motion'
 
 const positions = new Map<string, { left: number; top: number }>()
-watch(() => auth.user?.id, () => positions.clear())
+watch(() => auth.user?.id, () => { positions.clear(); clearNavigationMotion() })
 
 export const router = createRouter({
   history: createWebHistory(),
-  async scrollBehavior(to, from, saved) {
+  async scrollBehavior(to, from, saved): Promise<false> {
     if (to.path === from.path) return false
     await nextTick()
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-    return saved ?? positions.get(to.fullPath) ?? { left: 0, top: 0 }
+    const position = saved ?? positions.get(to.fullPath) ?? { left: 0, top: 0 }
+    window.scrollTo(position.left, position.top)
+    void finishNavigationMotion(to.path)
+    return false
   },
   routes: [
     { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { public: true } },
@@ -55,7 +58,10 @@ router.beforeEach((to, from) => {
   if (to.path === '/login' && auth.user) return '/'
 })
 
+router.beforeResolve((to, from) => beginNavigationMotion(from.path, to.path, from.fullPath, to.fullPath))
+
 router.afterEach(async (to, from, failure) => {
+  if (failure) void finishNavigationMotion(to.path, true)
   if (failure || to.path === from.path) return
   await nextTick()
   requestAnimationFrame(() => {
