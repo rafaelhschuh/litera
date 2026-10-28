@@ -23,9 +23,15 @@ const test = base.extend({
 const documentModule = ts.transpileModule(fs.readFileSync(new URL('../../src/shared/epub-document.ts', import.meta.url), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText
+const typographyModule = ts.transpileModule(fs.readFileSync(new URL('../../src/shared/reader-typography.ts', import.meta.url), 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText
+// Provide the document transform's real runtime dependency in this standalone
+// CommonJS fixture, including on reload when the browser is offline.
+const documentScript = `{const typography=(()=>{const exports={};${typographyModule};return exports})();const require=name=>{if(name==='./reader-typography.js')return typography;throw Error('Unknown fixture module: '+name)};const exports={};${documentModule};window.epubDocument=exports;}`
 
 test.beforeEach(async ({ page }) => {
-  await page.addScriptTag({ content: `{const exports={};${documentModule};window.epubDocument=exports;}` })
+  await page.addScriptTag({ content: documentScript })
 })
 
 test('local EPUB document keeps semantic nodes and applies appearance offline', async ({ page, context }) => {
@@ -74,7 +80,7 @@ test('transformed EPUB keeps CSP and rejects executable elements and handlers', 
 })
 
 test('server CSP permits nested local EPUB styles without allowing book scripts', async ({ page, context }) => {
-  await page.addInitScript({ content: `{const exports={};${documentModule};window.epubDocument=exports;}` })
+  await page.addInitScript({ content: documentScript })
   const response = await page.goto('/login')
   const policy = response!.headers()['content-security-policy'] ?? ''
   expect(policy.match(/(?:^|;)\s*style-src\s+([^;]+)/)?.[1]).toContain('blob:')
