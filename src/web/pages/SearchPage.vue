@@ -28,7 +28,7 @@ watch(() => route.query.q, value => {
 </script>
 <template>
   <div :aria-busy="refreshing">
-    <header class="page-header"><h1>Busca</h1></header>
+    <header class="page-header page-header--tab"><h1>Busca</h1></header>
     <form class="search-hero" role="search" @submit.prevent="search">
       <label for="search-q">Título ou autor</label>
       <div><input id="search-q" v-model="q" type="search" placeholder="Ex.: Machado de Assis" autofocus /><button class="button button--primary">Buscar</button></div>

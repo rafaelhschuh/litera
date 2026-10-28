@@ -7,6 +7,7 @@ defineProps<{ name: string; size?: number }>()
     <template v-if="name === 'home'"><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10M9 20v-6h6v6" /></template>
     <template v-else-if="name === 'library'"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l3-1 3 15-3 1z" /></template>
     <template v-else-if="name === 'search'"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></template>
+    <template v-else-if="name === 'filter'"><path d="M4 6h16M7 12h10M10 18h4" /></template>
     <template v-else-if="name === 'user'"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></template>
     <template v-else-if="name === 'users'"><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 4 5" /></template>
     <template v-else-if="name === 'series'"><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 2v3M16 2v3M8 9h8M8 13h6" /></template>

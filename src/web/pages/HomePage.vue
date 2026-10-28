@@ -16,7 +16,7 @@ async function remove(id: number) {
 </script>
 <template>
   <div :aria-busy="refreshing">
-    <header class="page-header"><h1>Início</h1></header>
+    <header class="page-header page-header--tab"><h1>Início</h1></header>
     <PageRefresh :busy="refreshing" :error="state==='loaded' ? error : ''" @retry="load" />
     <AppState v-if="state==='loading'" kind="loading" layout="catalog" />
     <AppState v-else-if="state==='error'" kind="error" title="Não foi possível carregar seu acervo" message="Confira a conexão e tente novamente."><button class="text-link" @click="load">Tentar novamente</button></AppState>

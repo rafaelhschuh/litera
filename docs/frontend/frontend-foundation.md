@@ -101,6 +101,10 @@ Login uses a centered 30rem panel with a wordmark header, one `h1`, labeled cred
 
 Empty states describe what is missing and a practical next action. Before a search is submitted, show the labeled form and ordinary links to authors, series and genres using the existing taxonomy-list pattern. Show results, no-results or failure feedback only after a query. Keep permission, offline, storage and destructive-action guidance where it affects the user's decision. These changes apply to the modern web client; `/legacy` retains its conservative layout and shared domain behavior.
 
+On phones, Home, Library, Favorites and Search retain an accessible `h1` but visually omit the repeated page header; the selected bottom tab identifies the destination. Pages reached through More, including filtered author/series/genre lists, keep their visible titles. Desktop and tablet retain the normal page headers.
+
+Library and Favorites share one compact search row with an explicit icon submit action and a filter toggle on phones. Format and sorting use the existing `UiField`/native-select pattern inside an inline disclosure, closed initially; the toggle exposes its expanded state and indicates nondefault choices. The result count sits below the controls. Desktop shows the same select controls directly, without duplicating fields or filtering state. All controls use existing spacing, surface, border, radius and icon primitives; searching by Enter and screen-reader labels remain available.
+
 ## Android host boundary
 
 The [Android host](../../android/README.md) displays this same web UI in a top-level WebView. Keep components, reader controls, dialogs, theme tokens and offline behavior shared. Kotlin handles server setup and window integration, not a parallel design system. Follow [ADR-0010](../decisions/ADR-0010-android-webview-host.md) and [android/AGENTS.md](../../android/AGENTS.md) when changing host appearance, pause or Back behavior.
