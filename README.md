@@ -95,6 +95,8 @@ Os dois modos EPUB preservam o caractere visível ao recalcular o layout e ao ap
 
 Em celulares (largura menor que 640 px), a navegação fica em uma barra inferior sólida e arredondada: **Favoritos · Biblioteca · Início · Busca · Outros**. A pílula de seleção desliza entre as opções. **Outros** reúne Autores, Séries, Gêneros, Configurações, Administração para administradores e Sair. A barra respeita a área segura do dispositivo e não aparece no leitor. Tablets mantêm o menu recolhível e desktop mantém a lateral.
 
+No celular, **Outros → Administração** abre as seções do painel no próprio menu inferior, com a seção atual destacada e retorno às opções gerais. Dentro do admin, Outros abre diretamente essa lista. Não há um segundo menu lateral administrativo no celular; a lateral/drawer de desktop e tablet usa os mesmos destinos.
+
 O leitor troca páginas com deslizamento lateral, nos dois sentidos, por gesto, botões ou teclado. A preferência de movimento reduzido remove a animação. Capítulos EPUB vizinhos e seus recursos são preparados antecipadamente; páginas do capítulo atual já estão em memória. PDF original prepara canvas e texto das páginas próximas, e o Adaptado prepara texto, figuras e fontes. A preparação é limitada a dois vizinhos por modo, descartada ao sair ou alterar o contexto; falhas usam o carregamento normal. Não cria downloads offline: continua usando a edição salva quando o livro está disponível no dispositivo.
 
 ## Correções do catálogo e leitor — 0.6.1

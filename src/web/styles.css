@@ -248,6 +248,19 @@ html[data-reader-theme]{scrollbar-gutter:auto}
 .more-navigation{display:grid;gap:var(--space-1)}
 .more-navigation a,.more-navigation button{display:flex;align-items:center;gap:var(--space-3);min-height:var(--space-7);padding:var(--space-3);border:0;border-radius:var(--radius-md);color:var(--text-secondary);background:transparent;text-align:left;text-decoration:none;font-weight:650;cursor:pointer}
 .more-navigation span{flex:1}.more-navigation [aria-current="page"]{color:var(--accent);background:var(--accent-soft)}.more-navigation a:hover,.more-navigation button:hover{background:var(--surface-secondary)}.more-navigation .more-navigation__logout{margin-top:var(--space-3);border-top:1px solid var(--border);border-radius:0;color:var(--danger)}
+.more-navigation .more-navigation__back{margin-bottom:var(--space-2);color:var(--text-secondary);font-weight:500}
+.more-navigation__section{margin:var(--space-4) var(--space-3) var(--space-1);color:var(--text-secondary);font-size:var(--text-sm);font-weight:650;letter-spacing:normal}
+.admin-shell aside a.is-selected{color:var(--accent);background:var(--accent-soft)}
+@media(min-width:640px) and (max-width:899px){
+  .admin-shell>aside{visibility:hidden;transition:transform var(--motion-normal) var(--ease-standard),visibility 0s var(--motion-normal)}
+  .admin-shell>aside.admin-navigation--open{visibility:visible;transition-delay:0s}
+}
+@media(max-width:639px){
+  .admin-shell>aside,.admin-shell .admin-nav-toggle{display:none}
+  .admin-shell>header{grid-template-columns:minmax(0,1fr) auto}
+  .admin-shell>header .wordmark{justify-self:start}
+  .admin-shell>main{min-width:0}
+}
 @keyframes sheet-enter{from{transform:translateY(var(--space-6))}to{transform:translateY(0)}}
 @media(max-width:639px){
   .app-shell .sidebar,.app-shell .nav-toggle,.app-shell .mobile-search{display:none}

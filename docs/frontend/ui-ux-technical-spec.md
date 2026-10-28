@@ -182,6 +182,8 @@ Nunca criar um menu mobile diferente por módulo. A aplicação inteira usa o me
 
 Admin reutiliza `Button`, `Input`, `Select`, `Dialog`, `Toast`, `Badge`, `Table`, etc. Não deve virar um design system paralelo.
 
+Em celulares abaixo de 640px, o menu administrativo fica em **Outros → Administração**, no mesmo painel inferior da navegação geral. Não renderizar um segundo drawer/hambúrguer acessível nesse tamanho. Dentro do admin, Outros abre diretamente as seções administrativas; “Voltar para Outros” retorna às opções gerais sem trocar a página. Destinos e seleção são compartilhados com a lateral, incluindo a seleção de Bibliotecas em detalhes de um acervo. Tablets mantêm drawer e desktop mantém lateral.
+
 ---
 
 ## 4.4 ReaderShell

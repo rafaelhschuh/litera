@@ -24,7 +24,8 @@ async function close() {
   if (disposed || request !== revision) return
   element.close(); closing?.cancel(); closing = undefined; delete element.dataset.closing
 }
-defineExpose({ close, isOpen: () => Boolean(dialog.value?.open) })
+function focusTitle() { dialog.value?.querySelector<HTMLElement>('header h2')?.focus() }
+defineExpose({ close, focusTitle, isOpen: () => Boolean(dialog.value?.open) })
 watch(() => props.open, async value => {
   await nextTick()
   if (disposed) return
@@ -48,7 +49,7 @@ function containFocus(event: KeyboardEvent) {
 <template>
   <dialog ref="dialog" class="dialog" :class="{ 'dialog--sheet': variant === 'sheet' }" :aria-labelledby="titleId" @click="event => { if (props.variant === 'sheet' && event.target === dialog) void close() }" @keydown="containFocus" @close="emit('close')" @cancel.prevent="close">
     <header>
-      <h2 :id="titleId">{{ title }}</h2>
+      <h2 :id="titleId" tabindex="-1">{{ title }}</h2>
       <button class="icon-button" :aria-label="closeLabel" @click="close"><UiIcon name="x" /></button>
     </header>
     <slot />
