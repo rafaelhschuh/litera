@@ -19,7 +19,7 @@ onMounted(load)
 </script>
 <template>
   <div>
-    <header class="page-header"><p class="eyebrow">Organização do acervo</p><h1>Metadata</h1><p>Edite títulos, descrições, coleções e imagens manualmente, com ou sem integração externa.</p></header>
+    <header class="page-header"><h1>Metadata</h1></header>
     <AppState v-if="loading" kind="loading" />
     <template v-else>
       <p v-if="notice" class="alert alert--success" role="status">{{ notice }}</p><p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>

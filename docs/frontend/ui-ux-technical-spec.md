@@ -18,6 +18,7 @@
 8. **Estados assíncronos são parte do componente.** Loading, empty, filtered-empty, error, disabled e read-only devem ser previstos.
 9. **Acessibilidade é default.** HTML semântico, foco visível, labels, teclado, touch targets e reduced motion.
 10. **Compatibilidade é explícita.** Componentes devem declarar se suportam Modern, Reduced e Legacy.
+11. **Texto tem função.** Cabeçalhos começam pelo título, sem rótulos decorativos ou slogans. Descrições explicam ações, escopo ou consequências; estados vazios informam o que falta e como prosseguir. Não repetir instruções já claras nos controles.
 
 ---
 
@@ -522,7 +523,6 @@ Desktop
 ┌──────────────────────────────────────────────────────────────┐
 │                                                              │
 │                       L I T E R A                            │
-│               Your personal library                         │
 │                                                              │
 │               ┌────────────────────────┐                     │
 │               │ Username / email       │                     │

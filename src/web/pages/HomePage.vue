@@ -16,13 +16,13 @@ async function remove(id: number) {
 </script>
 <template>
   <div :aria-busy="refreshing">
-    <header class="page-header"><p class="eyebrow">Sala de leitura</p><h1>Bem-vindo de volta</h1><p>Escolha onde a leitura continua hoje.</p></header>
+    <header class="page-header"><h1>Início</h1></header>
     <PageRefresh :busy="refreshing" :error="state==='loaded' ? error : ''" @retry="load" />
     <AppState v-if="state==='loading'" kind="loading" layout="catalog" />
     <AppState v-else-if="state==='error'" kind="error" title="Não foi possível carregar seu acervo" message="Confira a conexão e tente novamente."><button class="text-link" @click="load">Tentar novamente</button></AppState>
     <template v-else>
       <section v-if="home.continueReading.length" class="catalog-section"><header><h2>Continuar leitura</h2><RouterLink to="/library">Ver biblioteca</RouterLink></header><BookGrid :books="home.continueReading" compact :read-only="!syncState.online" @remove="remove" /></section>
-      <section class="catalog-section"><header><h2>{{ syncState.online ? 'Adicionados recentemente' : 'Disponíveis offline' }}</h2><RouterLink to="/library">Ver todos</RouterLink></header><BookGrid v-if="home.recentlyAdded.length" :books="home.recentlyAdded" /><AppState v-else kind="empty" :title="syncState.online ? 'A estante está pronta' : 'Você ainda não tem livros disponíveis offline'" :message="syncState.online ? 'Peça a um administrador para cadastrar e escanear uma pasta de livros.' : 'Conecte-se, abra um livro e escolha Salvar para offline.'" /></section>
+      <section class="catalog-section"><header><h2>{{ syncState.online ? 'Adicionados recentemente' : 'Disponíveis offline' }}</h2><RouterLink to="/library">Ver todos</RouterLink></header><BookGrid v-if="home.recentlyAdded.length" :books="home.recentlyAdded" /><AppState v-else kind="empty" :title="syncState.online ? 'Nenhum livro na biblioteca' : 'Você ainda não tem livros disponíveis offline'" :message="syncState.online ? 'Peça a um administrador para cadastrar e escanear uma pasta de livros.' : 'Conecte-se, abra um livro e escolha Salvar para offline.'" /></section>
     </template>
   </div>
 </template>

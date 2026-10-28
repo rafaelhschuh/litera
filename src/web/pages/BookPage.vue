@@ -40,7 +40,7 @@ async function rateHighlight(highlight:any,rating:number){await change(async()=>
     <BookCover :id="book.id" :title="book.title" :author="book.author" :has-cover="book.hasCover" :cover-revision="book.coverRevision" :format="book.format" />
     <div class="book-detail__copy">
       <PageRefresh :busy="refreshing" :error="loadError" @retry="load" />
-      <p class="eyebrow">{{ book.format.toUpperCase() }}</p><h1>{{ book.title }}</h1>
+      <h1>{{ book.title }}</h1>
       <p class="book-author"><RouterLink v-if="book.author" :to="`/authors/${encodeURIComponent(book.author)}`">{{ book.author }}</RouterLink><span v-else>Autor desconhecido</span></p>
       <div class="book-rating"><span>Sua avaliação</span><RatingStars :model-value="book.userRating||0" :disabled="busy || !syncState.online" label="Avaliação do livro" @update:model-value="rateBook" /><small v-if="!syncState.online">Avaliações requerem conexão.</small></div>
       <p v-if="error" class="alert alert--error" role="alert">{{ error }}</p>
@@ -50,7 +50,7 @@ async function rateHighlight(highlight:any,rating:number){await change(async()=>
       <p v-if="book.description" class="description">{{ book.description }}</p>
       <dl><div><dt>Formato</dt><dd>{{ book.format.toUpperCase() }}</dd></div><div v-if="book.series"><dt>Série</dt><dd><RouterLink :to="`/series/${encodeURIComponent(book.series)}`">{{ book.series }}<template v-if="book.seriesIndex"> · {{ book.seriesIndex }}</template></RouterLink></dd></div><div v-if="book.language"><dt>Idioma</dt><dd>{{ book.language }}</dd></div><div v-if="book.pageCount"><dt>Páginas</dt><dd>{{ book.pageCount }}</dd></div><div v-if="book.identifier"><dt>Identificador</dt><dd>{{ book.identifier }}</dd></div><div v-if="book.genres?.length"><dt>Gêneros</dt><dd class="genre-links"><RouterLink v-for="genre in book.genres" :key="genre" :to="`/genres/${encodeURIComponent(genre)}`">{{ genre }}</RouterLink></dd></div></dl>
       <section class="highlight-section">
-        <header><div><p class="eyebrow">Sua leitura</p><h2>Destaques</h2></div><RouterLink v-if="syncState.online || book.offline" class="button button--quiet" :to="`/read/${book.id}`">Voltar a ler</RouterLink></header>
+        <header><h2>Destaques</h2><RouterLink v-if="syncState.online || book.offline" class="button button--quiet" :to="`/read/${book.id}`">Voltar a ler</RouterLink></header>
         <div v-if="highlights.length" class="highlight-list">
           <article v-for="highlight in highlights" :key="highlight.id" class="highlight-card">
             <blockquote>“{{ highlight.quoteText }}”</blockquote>
@@ -58,7 +58,7 @@ async function rateHighlight(highlight:any,rating:number){await change(async()=>
             <footer><span>{{ highlight.pageNumber ? `Página ${highlight.pageNumber}` : highlight.chapter || 'Trecho do livro' }}</span><div class="reader-actions"><RouterLink v-if="syncState.online || book.offline" class="text-link" :to="`/read/${book.id}?highlight=${highlight.id}`">Abrir trecho</RouterLink><button class="icon-button" :disabled="busy" aria-label="Remover destaque" @click="removeHighlight(highlight.id)"><UiIcon name="x" :size="16" /></button></div></footer>
           </article>
         </div>
-        <div v-else class="state highlight-empty"><UiIcon name="sparkles" :size="28" /><h3>Nenhum destaque ainda</h3><p>Selecione um trecho durante a leitura para encontrá-lo aqui depois.</p></div>
+        <div v-else class="state highlight-empty"><h3>Nenhum destaque ainda</h3><p>Selecione um trecho durante a leitura para encontrá-lo aqui depois.</p></div>
       </section>
     </div>
   </article>

@@ -91,6 +91,14 @@ Use semantic HTML, visible focus, keyboard navigation, sufficient contrast, acce
 
 Before creating a visual component, search this foundation and the existing codebase for an equivalent. Reuse or extend it when semantically correct. Do not add arbitrary colors, radii, shadows, spacing scales, form patterns, modal behavior, or feedback patterns without a documented semantic reason.
 
+## Interface copy and page hierarchy
+
+Page headers lead with the destination's title. Do not prepend decorative uppercase labels, repeat the navigation category or add a slogan. Supporting text must explain an action, scope, state or consequence that is useful on that screen; counts and library paths remain appropriate context. Use typography and existing spacing tokens for hierarchy, without ornamental accent rules beneath every title.
+
+Login uses a single centered form with the Litera wordmark, one `h1`, labeled credentials, inline errors, submission status and the compatibility link. It has no promotional panel or tagline. Preserve autocomplete, keyboard submission, initial focus and duplicate-submit protection.
+
+Empty states describe what is missing and a practical next action. Before a search is submitted, the labeled search form is sufficient; show results, no-results or failure feedback only after a query. Keep permission, offline, storage and destructive-action guidance where it affects the user's decision. These changes apply to the modern web client; `/legacy` retains its conservative layout and shared domain behavior.
+
 ## Android host boundary
 
 The [Android host](../../android/README.md) displays this same web UI in a top-level WebView. Keep components, reader controls, dialogs, theme tokens and offline behavior shared. Kotlin handles server setup and window integration, not a parallel design system. Follow [ADR-0010](../decisions/ADR-0010-android-webview-host.md) and [android/AGENTS.md](../../android/AGENTS.md) when changing host appearance, pause or Back behavior.
