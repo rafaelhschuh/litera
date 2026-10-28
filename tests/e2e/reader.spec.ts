@@ -344,6 +344,7 @@ test('Chrome theme color follows system, reading theme and leaving the reader', 
     await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
   }
   await dialog.getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await page.getByRole('link', { name: 'Voltar ao livro' }).click()
   await expect(color).toHaveAttribute('content', '#191918')
   await expect(page.locator('html')).not.toHaveAttribute('data-reader-theme')
@@ -386,6 +387,7 @@ test('reader controls fit narrow screens and dialogs contain keyboard navigation
   await page.getByRole('button', { name: 'Buscar no livro', exact: true }).click()
   await expect(page.getByRole('dialog', { name: 'Buscar no livro' })).toBeVisible()
   await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await active(page).locator('body').evaluate(() => { window.focus() })
   await expect(page.locator('.reader-toolbar')).toBeHidden()
   await page.keyboard.press('Tab')
@@ -439,6 +441,7 @@ test('EPUB: chapter changes always start at the top and exact repeated highlight
     await expect.poll(async () => (await position(page)).y).toBeGreaterThan(0)
     await page.getByRole('button', { name: 'Abrir sumário' }).click()
     await page.getByRole('dialog').getByRole('button', { name: `Capítulo ${chapter}`, exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.locator('.reader-stage')).toHaveAttribute('aria-busy', 'false')
     await expect.poll(async () => (await position(page)).y).toBe(0)
     expect(await page.locator('.reader-stage').evaluate(el => el.scrollTop)).toBe(0)

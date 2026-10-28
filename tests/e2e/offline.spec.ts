@@ -116,6 +116,7 @@ async function epubChapter(page: Page, chapter: number) {
   if (!await contents.isVisible()) await page.keyboard.press('Tab')
   await contents.click()
   await page.getByRole('dialog').getByRole('button', { name: `Capítulo ${chapter}`, exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(active(page).locator('h1')).toHaveText(chapter === 1 ? 'Chegada' : 'Travessia')
   await ready(page)
 }
@@ -222,6 +223,7 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   await page.getByRole('dialog').getByRole('button', { name: 'Aumentar texto', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Sépia', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await ready(page)
   await expect(active(page).locator('.reader-document')).toHaveCSS('font-size', '19.8px')
   await expect(active(page).locator('body')).toHaveCSS('background-color', 'rgb(244, 234, 214)')
@@ -568,6 +570,7 @@ test('offline EPUB preserves viewport pages and the exact repeated-word highligh
   await page.getByRole('button', { name: 'Configurações de leitura' }).click()
   await page.getByRole('button', { name: 'Páginas pela tela', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Fechar painel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await ready(page)
   await expect(active(page).locator('.reader-pages')).toBeVisible()
   await active(page).locator('#repeated-1').evaluate(el => {
