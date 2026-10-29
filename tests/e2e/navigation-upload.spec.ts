@@ -78,6 +78,7 @@ test.describe('screen continuity and book upload', () => {
       if (new URL(route.request().url()).searchParams.get('format') === 'epub') await held
       await route.fulfill({ response })
     })
+    if (!await page.locator('#library-format').isVisible()) await page.getByRole('button', { name: /^Filtros e ordenação/ }).click()
     await page.locator('#library-format').selectOption('epub')
     await page.locator('#library-format').selectOption('pdf')
     await expect(page.locator('.book-grid:not(.skeleton-grid):visible')).toContainText('Caderno PDF')

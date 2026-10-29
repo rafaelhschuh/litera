@@ -323,7 +323,7 @@ test('automatic progress sync stays silent while pending and after confirmation'
   await expect(page.locator('.reader-sync')).toHaveCount(0)
   await page.getByRole('link', { name: 'Voltar ao livro' }).focus()
   await page.getByRole('link', { name: 'Voltar ao livro' }).click()
-  await expect(page.locator('.offline-status')).not.toContainText(/Sincronizando|Sincronizado|aguardando envio/)
+  await expect(page.getByRole('complementary', { name: 'Conexão e sincronização', exact: true })).toHaveCount(0)
 })
 
 })
