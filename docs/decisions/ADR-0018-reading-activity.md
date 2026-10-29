@@ -1,6 +1,6 @@
 # ADR-0018 — Atividade de leitura privada e sincronizável
 
-Status: Accepted (preparação local 0.9.0).
+Status: Accepted (0.9.0).
 
 ## Contexto
 
