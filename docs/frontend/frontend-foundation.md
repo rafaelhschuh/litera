@@ -170,3 +170,7 @@ Below 640px, administration uses the existing **More** sheet rather than a secon
 ## Preferences app section
 
 Preferences orders Appearance, Reading, Account security, then a single **Application and offline** section. Installation, Updates and Downloads are subsections with existing spacing/border/type tokens, without nested cards. Keep routine copy brief; installation instructions and storage estimates/account-local lifecycle details use native keyboard-accessible disclosures. The final app/download section remains available independently of loading account preferences.
+
+## Reading activity visual preview (development only)
+
+Home may present a clearly labeled illustrative activity preview in development: today/current-week totals, twenty-six Monday-first calendar columns (twelve on phones), and a day/week detail dialog. This is a visual proposal, not recorded reading activity; it does not write progress or sessions and must not replace real statistics in production. Heatmap levels derive from surface/soft-accent/accent tokens, with soft/solid fallbacks without color mixing. Dense calendar cells are supplementary pointer targets with arrow-key navigation; a full-size Details action, date input and previous/next controls expose the same information. Shared dialog motion and reduced-motion behavior apply. Tracking active time remains unimplemented and must not be implied by the sample values.
