@@ -360,8 +360,12 @@ async function performDownload(task: Download, format: 'epub' | 'pdf', onProgres
         if (chapterBlob) {
           const queue = [...new Set(epubReferences(await chapterBlob.text()).map(reference => epubAssetUrl(task.bookId, chapter.href, reference)).filter((url): url is string => Boolean(url)))]
           const queued = new Set(queue)
-          for (let offset = 0; offset < queue.length; offset += 3) {
-            await downloadTogether(task, queue.slice(offset, offset + 3), async url => {
+          for (let offset = 0; offset < queue.length;) {
+            const batch = queue.slice(offset, offset + 3)
+            // CSS may append dependencies while this batch runs. Advance by
+            // the actual batch size so a short batch cannot skip new entries.
+            offset += batch.length
+            await downloadTogether(task, batch, async url => {
               const blob = await save(url, `Salvando recursos do capítulo ${index + 1}…`)
               if (blob?.type.includes('text/css')) for (const reference of cssReferences(await blob.text())) {
                 const asset = epubAssetUrl(task.bookId, chapter.href, reference, url)

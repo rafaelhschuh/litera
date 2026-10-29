@@ -12,7 +12,7 @@
 - Home reduzida a uma linha com os últimos sete dias e ação Detalhes. Painel com dia/semana/mês, tempo ativo estimado, sessões, livros, destaques, comparação de períodos e calendário de seis meses.
 - Registro real de leitura EPUB/PDF com pausa por foco, visibilidade, carregamento, painéis e inatividade. Eventos privados e idempotentes, fila offline por conta e consolidação de intervalos sobrepostos; sem tempo retroativo ou dados ilustrativos.
 - Refinados login, títulos e filtros móveis de Biblioteca/Favoritos, preservando o design e reduzindo texto redundante.
-- Downloads offline com preparação e transferência delimitadas, concorrência limitada, progresso real, cancelamento/retry e preservação da cópia anterior em falhas.
+- Downloads offline com preparação e transferência delimitadas, concorrência limitada, progresso real, cancelamento/retry e preservação da cópia anterior em falhas. Corrigido o avanço da fila ao descobrir CSS aninhado, para não pular fontes e imagens em lotes incompletos.
 - Atualizações do webapp detectadas em startup/foreground/reconexão, oferecidas em diálogo voluntário; feedback de conexão/sincronização agrupado acima da barra móvel.
 - Administração móvel organizada em Outros; Aplicativo e offline unificados ao final das Preferências.
 - Migração aditiva para atividade de leitura. Android não integra esta release.
