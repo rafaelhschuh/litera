@@ -87,7 +87,7 @@ async function saveBook(page: Page, book: Book, userId: number) {
   const detail = await page.request.get(`/api/v1/books/${book.id}`)
   expect(detail.ok()).toBe(true)
   const revision = (await detail.json()).book.fileRevision
-  await page.getByRole('button', { name: 'Salvar para offline', exact: true }).click()
+  await page.locator('.offline-book-control').getByRole('button', { name: /^(Salvar para offline|Tentar novamente)$/ }).click()
   await expect(page.getByText('Disponível offline.', { exact: true })).toBeVisible({ timeout: 90_000 })
   await expect(page.getByRole('button', { name: 'Remover download', exact: true })).toBeVisible()
   await expect.poll(() => storedBook(page, userId, book.id)).toMatchObject({ userId, bookId: book.id, revision })
@@ -208,7 +208,7 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   const contentRequests = observeContent(context)
   await context.setOffline(true)
   await page.goto('/library')
-  await expect(page.getByText('Offline · livros deste dispositivo', { exact: true })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Conexão e sincronização', exact: true }).locator('summary')).toHaveText('Sem conexão')
   await expect(page.locator(`a[href="/books/${epub.id}"]`).first()).toBeVisible()
   await expect(page.locator(`a[href="/books/${pdf.id}"]`).first()).toBeVisible()
   await page.goto(`/read/${epub.id}`)
@@ -288,9 +288,10 @@ test('offline EPUB + PDF: deep reload, new tab, assets, annotations and library-
   await ready(cold)
   await markedText(cold.locator('mark[data-litera-highlight]'), pdfQuote)
   await cold.goto('/settings')
-  await expect(cold.getByRole('heading', { name: 'Offline', exact: true })).toBeVisible()
+  await expect(cold.getByRole('heading', { name: 'Aplicativo e offline', exact: true })).toBeVisible()
+  await expect(cold.getByRole('heading', { name: 'Downloads', exact: true })).toBeVisible()
   await cold.goto('/library')
-  await expect(cold.getByText('Offline · livros deste dispositivo', { exact: true })).toBeVisible()
+  await expect(cold.getByRole('complementary', { name: 'Conexão e sincronização', exact: true }).locator('summary')).toHaveText('Sem conexão')
   expect(contentRequests).toEqual([]) // includes failed requests and SW-originated requests
   // PDF navigation changed the viewport before the cold EPUB opening. Its
   // first visible character can move within the same paragraph after reflow;
@@ -406,7 +407,7 @@ test('download interrupted after partial bytes is not available and can be retri
   await page.goto(`/books/${pdf.id}`)
   await page.getByRole('button', { name: 'Salvar para offline', exact: true }).click()
   await expect.poll(() => transferred).toBeGreaterThan(4 * 1024 * 1024)
-  await expect(page.getByRole('button', { name: 'Salvar para offline', exact: true })).toBeEnabled()
+  await expect(page.locator('.offline-book-control').getByRole('button', { name: 'Tentar novamente', exact: true })).toBeEnabled()
   expect(await storedBook(page, user.id, pdf.id)).toBeUndefined()
   await expect(page.getByText('Disponível offline.', { exact: true })).toHaveCount(0)
   await expect.poll(async () => (await records(page, booksDatabase, 'stages')).length).toBe(0)
@@ -542,7 +543,7 @@ test('offline logout purges account A; account B cannot see or synchronize its b
   expect((await (await page.request.get(`/api/v1/books/${epub.id}/progress`)).json()).progress).toBeNull()
   await context.setOffline(true)
   await page.goto('/library')
-  await expect(page.getByText('Offline · livros deste dispositivo', { exact: true })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Conexão e sincronização', exact: true }).locator('summary')).toHaveText('Sem conexão')
   await expect(page.locator(`a[href="/books/${epub.id}"]`)).toHaveCount(0)
   await page.goto(`/read/${epub.id}`)
   await expect(page.getByRole('heading', { name: 'Não foi possível abrir este livro', exact: true })).toBeVisible()

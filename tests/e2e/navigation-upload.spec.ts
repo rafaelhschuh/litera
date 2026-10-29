@@ -113,7 +113,7 @@ test.describe('screen continuity and book upload', () => {
     await expect(page.locator('.sidebar')).not.toContainText('Administração')
     await page.setViewportSize({ width: 390, height: 844 })
     await page.getByRole('navigation', { name: 'Navegação inferior', exact: true }).getByRole('button', { name: 'Outros', exact: true }).click()
-    await expect(page.getByRole('dialog', { name: 'Outros', exact: true }).getByRole('link', { name: 'Administração', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: 'Outros', exact: true }).getByRole('button', { name: 'Administração', exact: true })).toHaveCount(0)
   })
 
   test('uploads real EPUB/PDF files from a library detail and reads the new EPUB', async ({ page }) => {

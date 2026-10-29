@@ -14,7 +14,7 @@ type SavedPackage = {
 // Inspect real committed IDB records, without creating or repairing any storage.
 async function packageSnapshot(page: Page, bookId: number): Promise<SavedPackage> {
   return page.evaluate(async id => {
-    type Resource = { bookId: number; generation: string; url: string; blob: Blob | ArrayBuffer }
+    type Resource = { bookId: number; generation: string; url: string; blob?: Blob | ArrayBuffer; alias?: string }
     const stored = await new Promise<{ books: SavedPackage['book'][]; resources: Resource[] }>((resolve, reject) => {
       const opening = indexedDB.open('litera-offline-books')
       opening.onupgradeneeded = () => opening.transaction!.abort()
@@ -32,7 +32,17 @@ async function packageSnapshot(page: Page, bookId: number): Promise<SavedPackage
     if (!book) throw new Error('Committed offline package missing')
     // Hash after the read transaction completes (safe across Safari IDB lifetimes).
     const resources = await Promise.all(stored.resources.filter(item => item.bookId === id && item.generation === book.generation).map(async item => {
-      const binary = item.blob instanceof Blob ? await item.blob.arrayBuffer() : item.blob
+      let resource = item
+      const visited = new Set<string>()
+      while (resource.alias) {
+        if (visited.has(resource.url) || visited.size >= 8) throw new Error('Cyclic offline resource alias')
+        visited.add(resource.url)
+        const target = stored.resources.find(candidate => candidate.bookId === id && candidate.generation === book.generation && candidate.url === resource.alias)
+        if (!target) throw new Error('Offline resource alias target missing')
+        resource = target
+      }
+      if (!resource.blob) throw new Error('Offline resource binary missing')
+      const binary = resource.blob instanceof Blob ? await resource.blob.arrayBuffer() : resource.blob
       return {
         url: item.url,
         bytes: binary.byteLength,
@@ -155,17 +165,19 @@ test('production SW update waits for consent and preserves EPUB through offline 
 
     // Leave the reader through its real SPA link, then accept via the actual UI.
     await page.getByRole('link', { name: 'Voltar ao livro', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Atualizar aplicativo', exact: true })).toBeVisible()
+    const updatePrompt = page.getByRole('dialog', { name: 'Atualização disponível', exact: true })
+    await expect(updatePrompt).toBeVisible()
+    await expect(updatePrompt.getByRole('button', { name: 'Atualizar agora', exact: true })).toBeVisible()
     await Promise.all([
       page.waitForEvent('load'),
-      page.getByRole('button', { name: 'Atualizar aplicativo', exact: true }).click(),
+      updatePrompt.getByRole('button', { name: 'Atualizar agora', exact: true }).click(),
     ])
     await expect(page.getByRole('heading', { name: epub.title, exact: true })).toBeVisible()
     await expect.poll(() => activeBuild(page)).toBe(nextBuild)
     expect(await page.evaluate(() => (window as Window & { pwaUpdateDocumentToken?: string }).pwaUpdateDocumentToken)).toBeUndefined()
     expect(await packageSnapshot(page, epub.id)).toEqual(saved)
     await expect(page.getByRole('button', { name: 'Remover download', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Atualizar aplicativo', exact: true })).toHaveCount(0)
+    await expect(updatePrompt).not.toBeVisible()
 
     await context.close(); context = undefined
     // The server is also stopped: this proves cold start without any possible
