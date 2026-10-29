@@ -71,7 +71,7 @@ Progress must be persisted per user and book using a format-aware locator.
 ### FR-008 — Continue Reading
 Users must see books with active progress and resume them directly.
 
-The modern Home also offers a compact personal summary of in-progress books, completed books and saved highlights. Counts cover available logical books in authorized libraries, independent of shelf limits or dismissal from Continue Reading. Completion follows persisted state rather than a new progress threshold. Offline counts cover only downloaded books, including local pending changes, and state that scope. The simplified legacy Home keeps its existing shelves.
+The modern Home offers one compact row for the last seven local days of recorded active reading. Details provides day/week/month navigation, estimated active time, sessions, books, highlights and a six-month calendar. Activity is private to the account and restricted to available logical books in authorized libraries. EPUB/PDF recording requires a ready, visible, focused reader, pauses for reader panels/loading or two minutes without input, and never infers past time from progress. Offline intervals persist through the existing outbox; immutable event IDs prevent retries from adding time, and overlapping server intervals count once. Offline summaries identify cached/provisional data. Recording remains optional and independent of format-aware locators, completion and reading availability. The simplified legacy Home keeps its existing shelves.
 
 ### FR-009 — Responsive editorial interface
 The web UI must support notebook/desktop, tablet, and mobile layouts without making the library or reader unusable.

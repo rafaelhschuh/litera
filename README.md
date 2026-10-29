@@ -2,7 +2,7 @@
 
 Litera Beta é uma biblioteca digital self-hosted para EPUB e PDF, com múltiplos acervos, jobs de scan, catálogo, metadata resiliente, reader integrado, progresso concorrente por usuário, painel administrativo e um cliente conservador em `/legacy`.
 
-**Versão atual:** `0.8.0` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.8.0`
+**Próxima versão (preparação local):** `0.9.0` · **Última publicada:** `0.8.0` · **Licença:** [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`) · **Imagem:** `ghcr.io/rafaelhschuh/litera:0.8.0`
 
 ## Ambiente local com Docker Compose
 
@@ -45,7 +45,7 @@ docker compose down
 
 ## Produção com Docker Compose
 
-O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) usa a imagem versionada `ghcr.io/rafaelhschuh/litera:0.8.0`, sem build local, `.env` ou substituição de variáveis. Antes do primeiro deploy:
+O arquivo [`docker-compose.production.yml`](docker-compose.production.yml) está preparado para a imagem versionada `ghcr.io/rafaelhschuh/litera:0.9.0` (ainda não publicada), sem build local, `.env` ou substituição de variáveis. Use a última imagem publicada até a release 0.9.0. Antes do primeiro deploy:
 
 1. crie a pasta `books` ao lado do Compose e copie para ela os arquivos `.epub` e `.pdf`;
 2. troque `CHANGE_ME_BEFORE_DEPLOY` por uma senha inédita de pelo menos 12 caracteres;
@@ -73,9 +73,17 @@ docker compose -f docker-compose.production.yml pull
 docker compose -f docker-compose.production.yml up -d
 ```
 
-O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção permanece fixado em `0.8.0` para evitar upgrades implícitos.
+O GHCR também recebe `main` e `sha-<commit>` a cada push na branch principal. Releases estáveis publicam as tags semânticas completa, minor, major e `latest`; o Compose de produção está preparado para `0.9.0` para evitar upgrades implícitos.
 
 As capas extraídas, enviadas manualmente ou geradas a partir da primeira página de um PDF são armazenadas como JPEG progressivo de até 640 × 960 pixels. O catálogo carrega somente esse derivado e nunca abre o PDF para montar a capa no navegador. Um rescan preenche automaticamente capas ausentes de PDFs já catalogados, mesmo quando o arquivo fonte não mudou. Capas persistidas por versões anteriores são convertidas no primeiro acesso, sem alterar o EPUB/PDF fonte.
+
+## Preparação local — 0.9.0
+
+A Home reúne os últimos sete dias de leitura em uma única linha. **Detalhes** abre períodos por dia, semana e mês, tempo ativo estimado, sessões, livros e destaques, além do calendário de seis meses. Os dados são privados da conta e consideram somente acervos autorizados.
+
+A medição começa nesta versão, com EPUB ou PDF aberto, visível e em foco; pausa em carregamentos, painéis, segundo plano ou após dois minutos sem interação. Não reconstrói tempo de leituras anteriores. Eventos entram na fila offline existente; o servidor elimina duplicatas e sobreposições de tempo. O histórico offline combina o último resumo salvo com leituras locais provisórias; destaques refletem a última consulta confirmada. Ver [ADR-0018](docs/decisions/ADR-0018-reading-activity.md).
+
+A preparação também inclui refinamentos do catálogo e login, downloads offline, atualização do aplicativo, feedback de conexão, administração móvel e preferências. Não há push, tag ou publicação desta versão nesta etapa.
 
 ## Leitura e navegação — 0.8.0
 

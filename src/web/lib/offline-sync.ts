@@ -4,13 +4,14 @@ import { defaultReaderTypography, resolveReaderTypography } from '../../shared/r
 import { getOfflineUser, offlineContext } from './offline-context'
 import { getOfflineBook, getOfflineResource, listOfflineBooks } from './offline-store'
 import { clearOfflineProgressUser, readOfflineProgress } from './offline-progress'
+import { emptyActivity, overlayActivity, type ActivityEvent, type ReadingActivity } from '../../shared/reading-activity'
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) { super(message) }
 }
 
 type Context = { userId: number; generation: number }
-type Kind = 'progress' | 'highlight-create' | 'highlight-delete' | 'favorite' | 'settings'
+type Kind = 'progress' | 'highlight-create' | 'highlight-delete' | 'favorite' | 'settings' | 'activity'
 type State = { userId: number; key: string; value: any; updatedAt: string; conflict?: { local: any; server?: any } }
 type Operation = {
   userId: number; id: string; sequence: number; key: string; kind: Kind; bookId?: number
@@ -45,7 +46,7 @@ function notifyReadingTabs(): void {
 
 export const syncState = reactive({
   online: typeof navigator === 'undefined' || navigator.onLine !== false,
-  pending: 0, failed: 0, syncing: false, requiresLogin: false, message: '', lastSyncedAt: null as string | null,
+  pending: 0, pendingChanges: 0, failed: 0, syncing: false, requiresLogin: false, message: '', lastSyncedAt: null as string | null,
   conflicts: [] as Array<{ bookId: number; kind: 'progress' }>,
 })
 
@@ -151,6 +152,7 @@ function readable(path: string): boolean {
   return /^\/api\/v1\/(?:books(?:\/\d+(?:\/(?:progress|highlights))?)?|home|settings)$/.test(path)
 }
 function mutationKind(path: string, method: string): Kind | undefined {
+  if (method === 'POST' && /^\/api\/v1\/books\/\d+\/activity$/.test(path)) return 'activity'
   if (method === 'PUT' && /^\/api\/v1\/books\/\d+\/progress$/.test(path)) return 'progress'
   if (method === 'POST' && /^\/api\/v1\/books\/\d+\/highlights$/.test(path)) return 'highlight-create'
   if (method === 'DELETE' && /^\/api\/v1\/highlights\/-?\d+$/.test(path)) return 'highlight-delete'
@@ -300,8 +302,9 @@ export async function offlineRequest<T>(url: string, options: RequestInit = {}):
 async function mutate(ctx: Context, url: string, method: string, kind: Kind, options: RequestInit, operationId: string): Promise<any> {
   let body = options.body ? JSON.parse(String(options.body)) : undefined
   let bookId = Number(url.match(/^\/api\/v1\/books\/(\d+)/)?.[1]) || undefined
-  let key = kind === 'settings' ? url : bookId ? stateKey(bookId, kind === 'highlight-create' ? '/highlights' : kind === 'favorite' ? '/favorite' : '/progress') : ''
-  if (key) await seed(ctx, key)
+  let key = kind === 'activity' ? `$activity:${body?.eventId}` : kind === 'settings' ? url : bookId ? stateKey(bookId, kind === 'highlight-create' ? '/highlights' : kind === 'favorite' ? '/favorite' : '/progress') : ''
+  if (key && kind !== 'activity') await seed(ctx, key)
+  if (kind === 'activity' && (!bookId || !/^[a-f\d-]{36}$/i.test(body?.eventId ?? '') || !Number.isInteger(body?.seconds) || body.seconds < 1 || body.seconds > 30)) throw new ApiError('Período de leitura inválido.', 400)
   if (kind === 'progress') {
     if (!['epub', 'pdf'].includes(body?.format)) throw new ApiError('Formato de progresso inválido.', 400)
     const normalized = normalizeProgress(body.format, body.locator as ReadingLocator, body.progressRatio)
@@ -309,7 +312,9 @@ async function mutate(ctx: Context, url: string, method: string, kind: Kind, opt
   }
   if (kind === 'highlight-create' && (typeof body?.quoteText !== 'string' || !body.quoteText.trim() || body.quoteText.length > 10_000 || !body.locator?.type)) throw new ApiError('Destaque inválido.', 400)
   const result = await transaction('readwrite', async tx => {
-    const [all, pending] = await Promise.all([states(tx, ctx.userId), operations(tx, ctx.userId)])
+    const [all, pending] = kind === 'activity'
+      ? [[await request<State | undefined>(tx.state.get([ctx.userId, '$sequence']))].filter((row): row is State => Boolean(row)), [] as Operation[]]
+      : await Promise.all([states(tx, ctx.userId), operations(tx, ctx.userId)])
     const counter = all.find(row => row.key === '$sequence')?.value ?? 0
     const sequence = counter + 1
     if (!Number.isSafeInteger(sequence)) throw new Error('Limite de operações locais atingido.')
@@ -330,7 +335,9 @@ async function mutate(ctx: Context, url: string, method: string, kind: Kind, opt
       if (create?.phase === 'queued') { tx.pending.delete([ctx.userId, create.id]); return undefined }
     } else {
       const stored = all.find(row => row.key === key)
-      if (kind === 'progress') {
+      if (kind === 'activity') {
+        response = { activity: { ...body, bookId }, acknowledged: false }
+      } else if (kind === 'progress') {
         if (stored?.conflict) throw new ApiError('Há um conflito de posição. Reabra o livro usando a posição do servidor para continuar sincronizando.', 409, 'STALE_PROGRESS')
         body.revision = stored?.value?.progress?.revision ?? body.revision ?? 0
         response = { progress: { ...body, completed: body.completed ?? body.progressRatio >= .98, lastReadAt: new Date().toISOString() } }
@@ -344,7 +351,7 @@ async function mutate(ctx: Context, url: string, method: string, kind: Kind, opt
       if (kind !== 'highlight-create') putState(tx, ctx, key, response)
     }
     // A sent operation stays immutable after timeout: it may already be committed.
-    if (kind !== 'highlight-create' && kind !== 'highlight-delete') for (const op of pending) {
+    if (kind !== 'highlight-create' && kind !== 'highlight-delete' && kind !== 'activity') for (const op of pending) {
       if (op.key === key && (op.phase === 'queued' || op.phase === 'failed')) tx.pending.delete([ctx.userId, op.id])
     }
     tx.pending.put({ userId: ctx.userId, id: operationId, sequence, key, kind, bookId, url, method, body, tempId, phase: 'queued', attempts: 0, nextAttemptAt: 0 } satisfies Operation)
@@ -358,10 +365,11 @@ async function mutate(ctx: Context, url: string, method: string, kind: Kind, opt
 }
 
 async function refresh(ctx = context()): Promise<void> {
-  if (!ctx) { syncState.pending = 0; syncState.failed = 0; syncState.conflicts = []; return }
+  if (!ctx) { syncState.pending = 0; syncState.pendingChanges = 0; syncState.failed = 0; syncState.conflicts = []; return }
   const pending = await transaction('readonly', tx => operations(tx, ctx.userId), ctx)
   assertContext(ctx)
   syncState.pending = pending.length
+  syncState.pendingChanges = pending.filter(op => op.kind !== 'activity').length
   syncState.failed = pending.filter(op => op.phase === 'failed').length
   if (!syncState.message && syncState.failed) syncState.message = pending.find(op => op.phase === 'failed')?.error ?? 'Uma alteração não pôde ser sincronizada.'
   syncState.conflicts = [...new Set(pending.filter(op => op.kind === 'progress' && op.phase === 'conflict').map(op => op.bookId!))].map(bookId => ({ bookId, kind: 'progress' as const }))
@@ -389,6 +397,11 @@ async function claim(ctx: Context): Promise<Operation | undefined> {
 async function acknowledge(ctx: Context, op: Operation, body: any): Promise<void> {
   await transaction('readwrite', async tx => {
     if (!await request(tx.pending.get([ctx.userId, op.id]))) return
+    if (op.kind === 'activity') {
+      tx.pending.delete([ctx.userId, op.id])
+      putState(tx, ctx, op.key, { activity: { ...op.body, bookId: op.bookId }, acknowledged: true })
+      return
+    }
     const [stored, pending] = await Promise.all([request<State | undefined>(tx.state.get([ctx.userId, op.key])), operations(tx, ctx.userId)])
     tx.pending.delete([ctx.userId, op.id])
     const successors = pending.filter(item => item.id !== op.id && item.key === op.key)
@@ -501,6 +514,68 @@ export async function retryOfflineSync(): Promise<void> {
   await flushOfflineSync()
 }
 
+/** One focused reader per account/profile, even when more than one tab exists. */
+export async function claimActivityLease(userId: number, token: string): Promise<boolean> {
+  const ctx = context()
+  if (!ctx || ctx.userId !== userId) return false
+  return transaction('readwrite', async tx => {
+    const key = '$activity-lease', previous = await request<State | undefined>(tx.state.get([userId, key]))
+    if (previous?.value?.owner !== token && previous?.value?.until > Date.now()) return false
+    putState(tx, ctx, key, { owner: token, until: Date.now() + 8_000 })
+    return true
+  }, ctx)
+}
+export async function releaseActivityLease(userId: number, token: string): Promise<void> {
+  const ctx = context()
+  if (!ctx || ctx.userId !== userId) return
+  await transaction('readwrite', async tx => {
+    const previous = await request<State | undefined>(tx.state.get([userId, '$activity-lease']))
+    if (previous?.value?.owner === token) tx.state.delete([userId, '$activity-lease'])
+  }, ctx)
+}
+
+/** Server totals plus unconfirmed local intervals, without counting a lost ACK twice. */
+export async function loadReadingActivity(from: string, to: string, timeZone: string): Promise<ReadingActivity> {
+  const ctx = context()
+  if (!ctx) throw new ApiError('Entre para consultar sua leitura.', 401)
+  const summaryKey = `$activity-summary:${timeZone}`
+  const before = await transaction('readonly', tx => states(tx, ctx.userId), ctx)
+  let base = before.find(row => row.key === summaryKey)?.value as ReadingActivity | undefined
+  const local = before.filter(row => row.key.startsWith('$activity:') && row.value?.activity).map(row => row.value.activity as ActivityEvent)
+  let offline = navigator.onLine === false || !syncState.online
+  if (!offline) {
+    try {
+      const included = new Set<string>()
+      let fetched: ReadingActivity | undefined
+      // Bound request size, while allowing a long disconnected reading history.
+      for (let offset = 0; offset < Math.max(1, local.length); offset += 10_000) {
+        const batch = local.slice(offset, offset + 10_000)
+        fetched = await network<ReadingActivity>('/api/v1/reading/activity/query', { method: 'POST', body: JSON.stringify({ from, to, timeZone, knownEventIds: batch.map(event => event.eventId), bookIds: [...new Set(local.map(event => event.bookId))].slice(0, 10_000) }) }, ctx)
+        fetched.includedEventIds.forEach(id => included.add(id))
+      }
+      fetched!.includedEventIds = [...included]
+      const fresh = fetched!
+      await transaction('readwrite', async tx => {
+        putState(tx, ctx, summaryKey, fresh)
+        for (const row of await states(tx, ctx.userId)) if (row.key.startsWith('$activity:') && row.value?.acknowledged && included.has(row.value.activity.eventId)) tx.state.delete([ctx.userId, row.key])
+      }, ctx)
+      base = fresh
+    } catch (error) {
+      if (!transient(error)) throw error
+      offline = true; syncState.online = false
+    }
+  }
+  const normalized = { ...emptyActivity(from, to, timeZone), ...base, from, to, timeZone, offline }
+  normalized.days = emptyActivity(from, to, timeZone).days.map(day => base?.days.find(item => item.date === day.date) ?? day)
+  const currentRows = await transaction('readonly', tx => states(tx, ctx.userId), ctx)
+  const events = currentRows.filter(row => row.key.startsWith('$activity:') && row.value?.activity).map(row => row.value.activity as ActivityEvent)
+  const titles = new Map<number, { title: string; author?: string }>()
+  for (const row of currentRows) if (row.value?.book) titles.set(row.value.book.id, row.value.book)
+  const result = overlayActivity(normalized, events, titles)
+  result.pending = events.filter(event => !normalized.includedEventIds.includes(event.eventId)).length
+  return result
+}
+
 export function initializeOfflineSync(): () => void {
   if (cleanup) return cleanup
   const online = () => { syncState.online = true; void flushOfflineSync() }
@@ -513,7 +588,7 @@ export function initializeOfflineSync(): () => void {
   const account = () => {
     for (const controller of controllers) controller.abort()
     if (timer) clearTimeout(timer)
-    syncState.pending = 0; syncState.failed = 0; syncState.requiresLogin = false; syncState.conflicts = []; syncState.message = ''; syncState.lastSyncedAt = null
+    syncState.pending = 0; syncState.pendingChanges = 0; syncState.failed = 0; syncState.requiresLogin = false; syncState.conflicts = []; syncState.message = ''; syncState.lastSyncedAt = null
     void (running ?? Promise.resolve()).finally(() => { void flushOfflineSync() })
   }
   window.addEventListener('online', online); window.addEventListener('offline', offline)

@@ -7,7 +7,8 @@ import { syncState, retryOfflineSync, resolveProgressConflict } from '../lib/off
 import { requestSignIn } from '../lib/auth'
 const router = useRouter(), route = useRoute(), error = ref(''), expanded = ref(false), active = ref(false)
 let activityTimer: ReturnType<typeof window.setTimeout> | undefined
-watch(() => syncState.pending > 0 || syncState.syncing, value => {
+// Routine time samples sync silently online; offline and failures remain visible.
+watch(() => syncState.pendingChanges > 0, value => {
   window.clearTimeout(activityTimer)
   if (value) activityTimer = window.setTimeout(() => { active.value = true }, 180)
   else active.value = false

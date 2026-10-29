@@ -13,6 +13,7 @@ import { resolveProgressConflict, syncState } from '../lib/offline-sync'
 import { openBookSource, type BookSource, type SourceView } from '../lib/book-source'
 import { attachReaderInput } from '../lib/reader-input'
 import { ReaderPreparation } from '../lib/reader-preparation'
+import { trackReadingActivity } from '../lib/reading-activity'
 import type { EpubAppearance, EpubNavigationItem } from '../../shared/epub-document'
 import { defaultReaderTypography, readerFonts, resolveReaderTypography, type ReaderTypography } from '../../shared/reader-typography'
 import { applyReaderTheme, applyTheme } from '../lib/theme'
@@ -39,6 +40,7 @@ const book = ref<Book>(), state = ref<'loading' | 'ready' | 'error'>('loading'),
 const readerNotice = computed(() => syncMessage.value || (syncState.online ? syncState.message : ''))
 const hasProgressConflict = computed(() => syncState.conflicts.some(conflict => conflict.bookId === id && conflict.kind === 'progress'))
 const resolvingConflict = ref(false)
+let stopActivity: (() => void) | undefined
 const toc = ref<Chapter[]>([]), currentChapter = ref(0), epubRatio = ref(0), frameSources = ref(['', '']), activeFrame = ref(0), epubBusy = ref(false)
 const epubNavigation = ref<EpubNavigationItem[]>([])
 const contents = computed<EpubNavigationItem[]>(() => epubNavigation.value.length ? epubNavigation.value : toc.value.map(item => ({ ...item, chapterHref: item.href, depth: 0 })))
@@ -969,6 +971,9 @@ function errorMessage(error: unknown) { const name = (error as any)?.name; if (n
 function retry() { window.location.reload() }
 
 onMounted(async () => {
+  try {
+    stopActivity = trackReadingActivity(id, () => state.value === 'ready' && !panel.value && !epubBusy.value && !reflowLoading.value && !layoutChanging.value, () => book.value?.format === 'epub' ? frame.value?.contentDocument ?? undefined : undefined)
+  } catch { /* Optional activity capabilities must never block reading. */ }
   try { toolbarPosition.value = localStorage.getItem('litera-reader-toolbar-position') === 'bottom' ? 'bottom' : 'top' } catch { /* Keep the default when optional browser storage is denied. */ }
   bodyOverflow = document.body.style.overflow; bodyOverscroll = document.body.style.overscrollBehavior; document.body.style.overflow = 'hidden'; document.body.style.overscrollBehavior = 'none'
   addEventListener('keydown', onKey); addEventListener('resize', scheduleLayout, { passive: true }); addEventListener('orientationchange', scheduleLayout, { passive: true }); visualViewport?.addEventListener('resize', scheduleLayout, { passive: true }); document.addEventListener('fullscreenchange', scheduleLayout); document.addEventListener('visibilitychange', visibility); document.addEventListener('selectionchange', documentSelection); addEventListener('pagehide', visibility); addEventListener('litera-host-pause', visibility); addEventListener('litera-host-resume', visibility); updateViewport(); layoutSize = { width: innerWidth, height: Math.round(visualViewport?.height ?? innerHeight) }; showChrome()
@@ -983,6 +988,7 @@ onMounted(async () => {
   } catch (error) { message.value = errorMessage(error); state.value = 'error'; restoring = false }
 })
 onBeforeUnmount(() => {
+  stopActivity?.()
   cancelReaderMotion?.()
   if (book.value?.format === 'epub') captureEpub(); else captureReflow(); unmounting = true; removeEventListener('keydown', onKey); removeEventListener('resize', scheduleLayout); removeEventListener('orientationchange', scheduleLayout); visualViewport?.removeEventListener('resize', scheduleLayout); document.removeEventListener('fullscreenchange', scheduleLayout); document.removeEventListener('visibilitychange', visibility); document.removeEventListener('selectionchange', documentSelection); removeEventListener('pagehide', visibility); removeEventListener('litera-host-pause', visibility); removeEventListener('litera-host-resume', visibility)
   releasePreparation(); clearPresentation(); for (const view of visiblePdf) view.release(); visiblePdf = []; epubAbort?.abort(); epubGeneration++; resizeObserver?.disconnect(); stageInputCleanup?.(); frameInputCleanup?.(); frameEventCleanup?.(); renders.cancel(); for (const layer of pdfTextLayers) layer?.cancel?.(); reflowGeneration++; searchGeneration++; clearTimeout(chromeTimer); clearTimeout(layoutTimer); cancelAnimationFrame(viewportFrame); cancelAnimationFrame(selectionFrame); bookSource?.dispose(); reflowView = undefined; epubViews.fill(undefined); fallbackReady?.(); fallbackReady = undefined; pdf = undefined; try { void pdfLoadingTask?.destroy?.().catch(() => undefined) } catch { /* deterministic cleanup */ }

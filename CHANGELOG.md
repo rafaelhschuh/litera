@@ -7,6 +7,16 @@
 - Workflow adicional para APK debug e validação Android, sem alterar a versão 0.5.5 ou publicação web/container.
 - Contratos Android, ADR e documentação conectados à raiz. O preview nativo rejeitado não foi integrado; o novo PR WebView aguarda teste e autorização do usuário, sem merge.
 
+## 0.9.0 — em preparação local (2026-10-29)
+
+- Home reduzida a uma linha com os últimos sete dias e ação Detalhes. Painel com dia/semana/mês, tempo ativo estimado, sessões, livros, destaques, comparação de períodos e calendário de seis meses.
+- Registro real de leitura EPUB/PDF com pausa por foco, visibilidade, carregamento, painéis e inatividade. Eventos privados e idempotentes, fila offline por conta e consolidação de intervalos sobrepostos; sem tempo retroativo ou dados ilustrativos.
+- Refinados login, títulos e filtros móveis de Biblioteca/Favoritos, preservando o design e reduzindo texto redundante.
+- Downloads offline com preparação e transferência delimitadas, concorrência limitada, progresso real, cancelamento/retry e preservação da cópia anterior em falhas.
+- Atualizações do webapp detectadas em startup/foreground/reconexão, oferecidas em diálogo voluntário; feedback de conexão/sincronização agrupado acima da barra móvel.
+- Administração móvel organizada em Outros; Aplicativo e offline unificados ao final das Preferências.
+- Migração aditiva para atividade de leitura. Android, push, tags e publicação não integram esta preparação.
+
 ## 0.8.0 — 2026-10-27
 
 - EPUB usa os títulos, hierarquia e fragmentos do sumário EPUB 3/NCX, preservando a ordem do spine e usando rótulos de capítulo como fallback. Metadados de head/title deixam de aparecer indevidamente na prosa.

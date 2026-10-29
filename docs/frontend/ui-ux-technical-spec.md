@@ -584,8 +584,9 @@ Desktop
 - progresso sempre visualmente consistente;
 - se não há leitura ativa, a seção desaparece ou usa `EmptyState` útil;
 - evitar dashboard com métricas irrelevantes ao leitor.
-- Resumo pessoal opcional acima das estantes: **Em leitura**, **Concluídos** e **Destaques**, em uma linha discreta com números editoriais e separadores. Sem gráficos, slogans ou novos cards. Em celulares, preservar três colunas e a ausência do título visual do módulo.
-- Contar todos os livros lógicos disponíveis nos acervos autorizados, sem o limite das estantes e sem duplicar arquivos do mesmo livro. Conclusão usa o estado persistido; ocultar de Continuar leitura não encerra a leitura. Destaques são privados da conta. Offline, contar apenas os livros do dispositivo e informar esse escopo.
+- Acima das estantes, uma única linha com os últimos sete dias de leitura, tempo acumulado e **Detalhes**. Sem título adicional no mobile, dados ilustrativos ou calendário grande na Home.
+- Detalhes usa o diálogo compartilhado: dia/semana/mês, data anterior/próxima, tempo ativo, sessões, livros, destaques, comparação quando houver cobertura anterior e lista de livros. Calendário de seis meses fica em disclosure, com setas de teclado e alternativa de data nativa.
+- Medir EPUB/PDF prontos, visíveis e em foco; pausar com painéis/carregamento e após dois minutos sem interação. Tempo é estimado, começa nesta versão e não altera locators ou conclusão. Histórico privado por conta, autorizado por acervo, idempotente e sincronizado pela outbox. Offline identifica resumo salvo e intervalos locais provisórios; destaques refletem a consulta confirmada. [ADR-0018](../decisions/ADR-0018-reading-activity.md).
 
 ---
 

@@ -11,8 +11,9 @@ const modules = new Map<string, string>()
 for (const name of ['offline-sync', 'offline-store', 'offline-context', 'offline-progress', 'api']) {
   const source = fs.readFileSync(new URL(`../src/web/lib/${name}.ts`, import.meta.url), 'utf8')
   modules.set(`/${name}.js`, ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
-    .replaceAll("from 'vue'", "from '/vue.js'").replaceAll("from '../../shared/progress'", "from '/progress.js'").replaceAll("from '../../shared/reader-typography'", "from '/reader-typography.js'").replace(/from '\.\/([^']+)'/g, "from '/$1.js'"))
+    .replaceAll("from 'vue'", "from '/vue.js'").replaceAll("from '../../shared/reading-activity'", "from '/reading-activity.js'").replaceAll("from '../../shared/progress'", "from '/progress.js'").replaceAll("from '../../shared/reader-typography'", "from '/reader-typography.js'").replace(/from '\.\/([^']+)'/g, "from '/$1.js'"))
 }
+modules.set('/reading-activity.js', ts.transpileModule(fs.readFileSync(new URL('../src/shared/reading-activity.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
 modules.set('/progress.js', ts.transpileModule(fs.readFileSync(new URL('../src/shared/progress.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
 modules.set('/reader-typography.js', ts.transpileModule(fs.readFileSync(new URL('../src/shared/reader-typography.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
 modules.set('/vue.js', fs.readFileSync(new URL('../node_modules/vue/dist/vue.runtime.esm-browser.js', import.meta.url), 'utf8'))

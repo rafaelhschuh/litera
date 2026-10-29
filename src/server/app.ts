@@ -19,6 +19,7 @@ import { validateLibraryPath } from './scanner.js'
 import { receiveBook, uploadFilename, UploadError } from './uploads.js'
 import { createScanJob, enqueueScanJob, mapScanJob, resumeScanJobs, runScanJob } from './jobs.js'
 import { configuredMetadataProvider } from './metadata.js'
+import { activityEventSchema, activityQuerySchema, readingActivity } from './reading-activity.js'
 
 const projectRoot = process.cwd()
 const pdfStandardFontDataUrl = `${path.join(path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'standard_fonts')}${path.sep}`
@@ -168,7 +169,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     next()
   })
 
-  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.8.0', database: 'ok' }))
+  app.get('/health', (_req, res) => res.json({ status: 'ok', version: '0.9.0', database: 'ok' }))
 
   const loginAttempts = new Map<string, { count: number; reset: number }>()
   app.post('/api/v1/auth/login', (req, res) => {
@@ -222,6 +223,21 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     ).get(req.user!.role, req.user!.id, req.user!.id, req.user!.id, req.user!.id)
     res.json({ continueReading, recentlyAdded, readingStats })
   })
+  app.post('/api/v1/reading/activity/query', requireUser, (req, res) => {
+    const input = activityQuerySchema.safeParse(req.body)
+    if (!input.success) { apiError(res, 400, 'INVALID_ACTIVITY_QUERY', 'Período de leitura inválido.'); return }
+    res.json(readingActivity(db, req.user!, input.data))
+  })
+  app.post('/api/v1/books/:id/activity', requireUser, mutation(req => {
+    const input = activityEventSchema.safeParse(req.body)
+    if (!input.success) return rejected(400, 'INVALID_ACTIVITY', 'Período de leitura inválido.')
+    const item = input.data, bookId = Number(req.params.id)
+    const previous = db.prepare('SELECT * FROM reading_activity WHERE user_id=? AND event_id=?').get(req.user!.id, item.eventId) as any
+    if (previous) {
+      if (previous.book_id !== bookId || previous.session_id !== item.sessionId || previous.started_at !== item.startedAt || previous.ended_at !== item.endedAt || previous.seconds !== item.seconds || previous.day !== item.day || previous.time_zone !== item.timeZone) return rejected(409, 'ACTIVITY_ID_REUSED', 'Identificador de leitura já utilizado.')
+    } else db.prepare('INSERT INTO reading_activity(user_id,event_id,book_id,session_id,started_at,ended_at,day,time_zone,seconds) VALUES (?,?,?,?,?,?,?,?,?)').run(req.user!.id, item.eventId, bookId, item.sessionId, item.startedAt, item.endedAt, item.day, item.timeZone, item.seconds)
+    return { status: 200, body: { accepted: true } }
+  }))
   app.get('/api/v1/books', requireUser, (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
     const pattern = `%${q.replace(/[%_]/g, '\\$&')}%`
@@ -690,7 +706,7 @@ export function createApp(config: AppConfig, suppliedDb?: LiteraDatabase) {
     const migrations = db.prepare('SELECT version,applied_at AS appliedAt FROM schema_migrations ORDER BY version').all()
     const storage = fs.statfsSync(config.dataDir)
     const providerEnabled = (db.prepare(`SELECT value FROM system_settings WHERE key='metadata.openlibrary.enabled'`).get() as any)?.value === 'true'
-    res.json({ version: '0.8.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
+    res.json({ version: '0.9.0', build: process.env.LITERA_BUILD ?? 'development', health: 'healthy', database: { engine: 'SQLite', journalMode: db.pragma('journal_mode', { simple: true }), migrations }, storage: { dataDir: config.dataDir, availableBytes: storage.bavail * storage.bsize }, allowedBookRoots: config.allowedBookRoots, secureCookies: config.secureCookies, metadataProvider: providerEnabled ? 'Open Library (enabled)' : 'Open Library (disabled)', maxBookBytes: config.maxBookBytes })
   })
 
   app.get(['/legacy', '/legacy/*path'], (req, res) => {

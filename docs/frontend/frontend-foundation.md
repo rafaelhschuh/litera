@@ -153,9 +153,11 @@ Text reading also offers independent top/bottom margins, each 0–160px (4px ran
 
 `OfflineBookControl` groups download/cancel actions and reuses the shared spinner, native progress and field/status text. Preparation and final confirmation use indeterminate progress; transfer shows completed EPUB chapters or PDF pages, with at most 99% until final confirmation. Received bytes are separate from the semantic unit count. The live status announces phase changes; byte updates are supplementary text. Keep retry actionable and explain that a cancelled update preserves the previous download. Details: [ADR-0016](../decisions/ADR-0016-offline-download-pipeline.md).
 
-## Home reading summary
+## Home reading activity
 
-The `stat-grid--reading` variant presents three personal counts in a compact, semantic definition list: books in progress, completed books and saved highlights. It reuses the editorial numeric type, secondary labels, spacing and border tokens, with subtle separators and no card backgrounds, shadows or counters in motion. All three columns remain on one row on phones. Missing statistics omit this optional summary; catalog loading/error states remain shared. Offline counts explicitly cover only books on this device. Legacy keeps the existing simplified Home.
+Home uses a single compact horizontal row: seven activity cells for the last seven local days, their total active time and a full-size Details action. No extra heading, card stack or illustrative data. Reuse existing spacing, surface/soft-accent/accent, type and border tokens; color mixing is optional. The current day has an outline. Each cell has a date/time accessible label and opens that date; Details provides the same full-size alternative on touch screens.
+
+Details extends `UiDialog` with Day/Week/Month segmented controls, bounded native date navigation, active time/sessions/books/highlights, an equivalent preceding-period comparison where recorded coverage exists, weekly bars, a native disclosure for the six-month calendar and authorized books. Calendar arrows provide keyboard exploration; reduced motion uses the shared dialog behavior. Empty history is zero, never sample activity. Offline data and local unconfirmed intervals are identified. Recording is optional and must never block reading. Legacy keeps its existing Home. See [ADR-0018](../decisions/ADR-0018-reading-activity.md).
 
 ## App update and connection feedback
 
@@ -170,7 +172,3 @@ Below 640px, administration uses the existing **More** sheet rather than a secon
 ## Preferences app section
 
 Preferences orders Appearance, Reading, Account security, then a single **Application and offline** section. Installation, Updates and Downloads are subsections with existing spacing/border/type tokens, without nested cards. Keep routine copy brief; installation instructions and storage estimates/account-local lifecycle details use native keyboard-accessible disclosures. The final app/download section remains available independently of loading account preferences.
-
-## Reading activity visual preview (development only)
-
-Home may present a clearly labeled illustrative activity preview in development: today/current-week totals, twenty-six Monday-first calendar columns (twelve on phones), and a day/week detail dialog. This is a visual proposal, not recorded reading activity; it does not write progress or sessions and must not replace real statistics in production. Heatmap levels derive from surface/soft-accent/accent tokens, with soft/solid fallbacks without color mixing. Dense calendar cells are supplementary pointer targets with arrow-key navigation; a full-size Details action, date input and previous/next controls expose the same information. Shared dialog motion and reduced-motion behavior apply. Tracking active time remains unimplemented and must not be implied by the sample values.

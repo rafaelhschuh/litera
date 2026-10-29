@@ -231,6 +231,21 @@ export const migrations = [
   ALTER TABLE reader_preferences ADD COLUMN margin_top REAL NOT NULL DEFAULT 80;
   ALTER TABLE reader_preferences ADD COLUMN margin_bottom REAL NOT NULL DEFAULT 96;
   `,
+  `
+  CREATE TABLE reading_activity (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL,
+    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    day TEXT NOT NULL,
+    time_zone TEXT NOT NULL,
+    seconds INTEGER NOT NULL CHECK(seconds BETWEEN 1 AND 30),
+    PRIMARY KEY(user_id,event_id)
+  );
+  CREATE INDEX reading_activity_day ON reading_activity(user_id,day,book_id);
+  `,
 ]
 
 export type LiteraDatabase = Database.Database
